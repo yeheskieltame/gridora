@@ -7,7 +7,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { TradesTable } from "@/components/TradesTable";
 import { VerifyPanel } from "@/components/VerifyPanel";
 import { Wordmark } from "@/components/Wordmark";
-import { BnbMark, TrustWalletMark } from "@/components/brand";
 import { CornerTicks } from "@/components/Sparkline";
 import { GlowCard } from "@/components/GlowCard";
 import { RPC_URL } from "@/lib/chain";
@@ -119,14 +118,24 @@ export default async function Page() {
 
       {/* BUILT ON */}
       <section aria-label="Built on" className="border-b border-line">
-        <div className="mx-auto flex max-w-6xl flex-col items-center gap-5 px-6 py-12 sm:px-10">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-6 py-14 sm:px-10">
           <span className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted">Built on</span>
-          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-fg"><BnbMark className="h-5 w-5" /> BNB Chain</span>
-            <span className="inline-flex items-center gap-2 text-sm font-semibold text-fg"><TrustWalletMark className="h-5 w-5" /> Trust Wallet Agent Kit</span>
-            <span className="text-sm font-semibold text-muted">CoinMarketCap</span>
-            <span className="text-sm font-semibold text-muted">PancakeSwap</span>
-          </div>
+          <ul className="flex flex-wrap items-center justify-center gap-4 sm:gap-5">
+            {[
+              ["BNB Chain", "/bnb-chain-logo.png"],
+              ["CoinMarketCap", "/cmc-logo.jpg"],
+              ["Trust Wallet", "/trustwallet-logo.svg"],
+              ["PancakeSwap", "/pancakeswap-logo.svg"],
+            ].map(([name, src]) => (
+              <li
+                key={name}
+                className="flex h-16 w-44 items-center justify-center rounded-2xl border border-line bg-white px-5 shadow-sm transition-transform duration-300 hover:-translate-y-0.5"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={src} alt={name} className="max-h-10 w-auto object-contain" />
+              </li>
+            ))}
+          </ul>
         </div>
       </section>
 

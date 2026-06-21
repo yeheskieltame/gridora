@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="96" viewBox="0 0 420 96" fill="none">
+  <!-- pancake stack mark -->
+  <g transform="translate(10,16)">
+    <rect x="0" y="42" width="62" height="18" rx="9" fill="#633001"/>
+    <rect x="0" y="21" width="62" height="18" rx="9" fill="#D1884F"/>
+    <rect x="0" y="0" width="62" height="18" rx="9" fill="#FEDC90"/>
+    <circle cx="47" cy="7" r="6.5" fill="#1FC7D4"/>
+  </g>
+  <text x="86" y="60" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="700" fill="#633001">PancakeSwap</text>
+</svg>

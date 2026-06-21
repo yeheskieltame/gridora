@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="96" viewBox="0 0 400 96" fill="none">
+  <defs>
+    <linearGradient id="twg" x1="385.26" y1="-34.78" x2="216.61" y2="493.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0.02" stop-color="#0000FF"/><stop offset="0.08" stop-color="#0094FF"/>
+      <stop offset="0.16" stop-color="#48FF91"/><stop offset="0.42" stop-color="#0094FF"/>
+      <stop offset="0.68" stop-color="#0038FF"/><stop offset="0.9" stop-color="#0500FF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(10,12) scale(0.1437)">
+    <path d="M0.71 72.41 222.16 0.11V500.63C63.98 433.89 0.71 305.98 0.71 233.69V72.41Z" fill="#0500FF"/>
+    <path d="M443.62 72.41 222.17 0.11V500.63C380.35 433.89 443.62 305.98 443.62 233.69V72.41Z" fill="url(#twg)"/>
+  </g>
+  <text x="92" y="60" font-family="Inter, Arial, sans-serif" font-size="38" font-weight="700" fill="#16181D">Trust Wallet</text>
+</svg>

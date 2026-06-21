@@ -178,6 +178,20 @@ Testnet by default (chainId 97). The agent refuses on an environment and chain m
 
 ---
 
+## Built on
+
+<p align="center">
+  <img src="frontend/web/public/bnb-chain-logo.png" alt="BNB Chain" height="46">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="frontend/web/public/cmc-logo.jpg" alt="CoinMarketCap" height="46">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="frontend/web/public/trustwallet-logo.svg" alt="Trust Wallet" height="46">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="frontend/web/public/pancakeswap-logo.svg" alt="PancakeSwap" height="46">
+</p>
+
+<p align="center"><sub>BNB Smart Chain · Trust Wallet Agent Kit · CoinMarketCap · PancakeSwap</sub></p>
+
 ## Brand assets
 
 See [`frontend/web/public/README.md`](./frontend/web/public/README.md). Brand colors: coral `#D97757`, light coral `#F2AE80`, deep clay `#A24E32`, cream `#F0EEE6`, near-black `#0A0A0A`.
