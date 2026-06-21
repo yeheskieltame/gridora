@@ -172,6 +172,27 @@ The public page is the agent's proof of work. It reads BNB Chain directly with v
 
 ---
 
+## On-chain (BNB Smart Chain mainnet, chain 56)
+
+Everything below is live and signed by the agent wallet `0x7053676258ef5bFB9b27FCF42092F13fB37B9989`. Live verifier: **https://gridora.vercel.app**.
+
+| What | Address / id | Proof |
+|---|---|---|
+| Agent wallet (TWAK-signed) | [`0x7053…9989`](https://bscscan.com/address/0x7053676258ef5bFB9b27FCF42092F13fB37B9989) | TWAK-managed, keys local |
+| Competition registration | contract [`0x212c…Aed5`](https://bscscan.com/address/0x212c61b9b72c95d95bf29cf032f5e5635629aed5) | [tx](https://bscscan.com/tx/0x11137b00830122e2949620920e6538ccf7c3cb915706cf55e8231f7ea253f692) |
+| ERC-8004 identity (primary) | agentId `140004`, URI `https://gridora.vercel.app` | [tx](https://bscscan.com/tx/0x8b90829ef0a6854deeff31b212e3fb49f6e3262ebd740d71c0d405400015fdb9) |
+| IdentityRegistry (verifier) | [`0x400B0D1a98735871175D3B3C231A6250322ECA5A`](https://bscscan.com/address/0x400B0D1a98735871175D3B3C231A6250322ECA5A#code) | verified, agent minted as id `1` |
+| TradeJournal (verifier) | [`0xE946C28ea10bf29AcA9a094f66079De84a50d409`](https://bscscan.com/address/0xE946C28ea10bf29AcA9a094f66079De84a50d409#code) | verified |
+| StrategyLedger (verifier) | [`0x56D4831a39A991Ac0fa8CAe533Cb74E47A5DD79d`](https://bscscan.com/address/0x56D4831a39A991Ac0fa8CAe533Cb74E47A5DD79d#code) | verified |
+
+The agent proves work two ways. The primary identity is the TWAK-native ERC-8004 registration. The three verifier contracts are a self-hosted mirror the public page reads. TWAK cannot call arbitrary contracts, so the mirror is written with the agent key through Foundry `cast` (`adapters/chain/bsc_mirror.py`, the `BscMirror` ChainPort): it mints the identity, commits the config hash before trading, and records each settled episode with its attested outcome. In live mode the agent loop uses this writer automatically when the contract addresses are configured.
+
+```bash
+# one-off identity mint / status (reads addresses + signer from backend/.env)
+python -m gridora.adapters.chain.bsc_mirror register
+python -m gridora.adapters.chain.bsc_mirror status
+```
+
 ## Defaults and safety
 
 Testnet by default (chainId 97). The agent refuses on an environment and chain mismatch. Private keys are never committed or printed; `.env` and `.secrets/` are gitignored. Any mainnet or money action stops and asks first.

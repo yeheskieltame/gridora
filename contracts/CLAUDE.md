@@ -26,6 +26,15 @@ forge script script/Deploy.s.sol --rpc-url bsc --broadcast --verify     # mainne
 ```
 Copy printed addresses into `backend/.env` (GRIDORA_*_ADDR) and `frontend/web/.env`.
 
+## Deployed (BSC mainnet, chain 56), 2026-06-21, verified on BscScan
+- IdentityRegistry `0x400B0D1a98735871175D3B3C231A6250322ECA5A` (agent minted as id 1)
+- TradeJournal `0xE946C28ea10bf29AcA9a094f66079De84a50d409`
+- StrategyLedger `0x56D4831a39A991Ac0fa8CAe533Cb74E47A5DD79d`
+
+Written by the agent key via Foundry `cast` (`backend/.../adapters/chain/bsc_mirror.py:BscMirror`),
+because TWAK has no arbitrary contract call. Addresses are wired into `backend/.env`,
+`frontend/web/.env`, and the Vercel project env (live verifier reads mainnet).
+
 ## Note
 This is the on-chain VERIFIER, separate from the BNB Hack competition contract
 (`0x212c61b9b72c95d95bf29cf032f5e5635629aed5`) you register the agent on via TWAK.

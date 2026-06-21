@@ -112,10 +112,21 @@ async def run_dry(market: str, preset: RiskPreset, margin: Decimal) -> None:
     print("=== dry run complete — the same loop runs live with TWAK + CMC + BSC ===\n")
 
 
+def _live_chain(twak):
+    """Live ChainPort. When the custom verifier contracts are deployed (GRIDORA_*_ADDR set),
+    mirror proofs there with the agent key via `cast` (BscMirror) — that's what the public
+    verifier page reads. Otherwise fall back to TWAK-native ERC-8004 metadata (BscChain)."""
+    import os
+    if os.environ.get("GRIDORA_IDENTITY_ADDR"):
+        from .adapters.chain.bsc_mirror import BscMirror
+        return BscMirror.from_env()
+    from .adapters.chain.client import BscChain
+    return BscChain(twak, chain_key=settings.chain_key, agent_uri=settings.agent_uri)
+
+
 async def run_live(market: str, preset: RiskPreset, margin: Decimal) -> None:
     settings.guard()
     settings.assert_twak_creds()   # fail before any on-chain commit / signing if creds are missing
-    from .adapters.chain.client import BscChain
     from .adapters.exchanges.bsc_twak.adapter import BscTwakExchange
     from .adapters.exchanges.bsc_twak.twak_client import TwakClient
     from .adapters.payments.x402 import X402Payments
@@ -126,7 +137,7 @@ async def run_live(market: str, preset: RiskPreset, margin: Decimal) -> None:
                                use_limit_orders=not settings.swap_fallback, slippage_pct=settings.slippage_pct)
     signals = CmcSignals(X402Payments(twak, max_payment=settings.x402_max_payment,
                                       prefer_network=settings.chain_key), base_url=settings.cmc_base_url, api_key=settings.cmc_api_key)
-    chain = BscChain(twak, chain_key=settings.chain_key, agent_uri=settings.agent_uri)
+    chain = _live_chain(twak)
     allowlist = Allowlist(symbols=load_allowlist())
     breaker, profit_guard, account_guard = _build_guards()
     loop = LearningLoop(exchange, signals, chain, allowlist, breaker, profit_guard,
@@ -232,7 +243,6 @@ async def run_agentic(mode: str, market: str, margin: Decimal, brain_kind: str,
     else:
         settings.guard()
         settings.assert_twak_creds()   # fail before any on-chain commit / signing if creds are missing
-        from .adapters.chain.client import BscChain
         from .adapters.exchanges.bsc_twak.adapter import BscTwakExchange
         from .adapters.exchanges.bsc_twak.twak_client import TwakClient
         from .adapters.payments.x402 import X402Payments
@@ -245,7 +255,7 @@ async def run_agentic(mode: str, market: str, margin: Decimal, brain_kind: str,
         exchange = exchange_for(market)
         signals = CmcSignals(X402Payments(twak, max_payment=settings.x402_max_payment,
                                           prefer_network=settings.chain_key), base_url=settings.cmc_base_url, api_key=settings.cmc_api_key)
-        chain = BscChain(twak, chain_key=settings.chain_key, agent_uri=settings.agent_uri)
+        chain = _live_chain(twak)
         state.venue = "BSC_TWAK"
         venue = Venue.BSC_TWAK
 
@@ -299,7 +309,6 @@ async def run_portfolio(mode: str, margin: Decimal, n_markets: int) -> None:
     else:
         settings.guard()
         settings.assert_twak_creds()
-        from .adapters.chain.client import BscChain
         from .adapters.exchanges.bsc_twak.adapter import BscTwakExchange
         from .adapters.exchanges.bsc_twak.twak_client import TwakClient
         from .adapters.payments.x402 import X402Payments
@@ -308,7 +317,7 @@ async def run_portfolio(mode: str, margin: Decimal, n_markets: int) -> None:
         signals = CmcSignals(X402Payments(twak, max_payment=settings.x402_max_payment,
                                           prefer_network=settings.chain_key),
                              base_url=settings.cmc_base_url, api_key=settings.cmc_api_key)
-        chain = BscChain(twak, chain_key=settings.chain_key, agent_uri=settings.agent_uri)
+        chain = _live_chain(twak)
         venue = Venue.BSC_TWAK
 
         def exchange_for(market):  # one exchange per market, sharing the one TWAK wallet
