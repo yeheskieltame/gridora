@@ -132,9 +132,19 @@ export default async function Page() {
 
       {/* FOOTER */}
       <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-6 py-8 text-xs text-muted sm:flex-row sm:items-center sm:justify-between sm:px-10">
-          <span>BNB Hack: AI Trading Agent Edition · CoinMarketCap × Trust Wallet × BNB Chain</span>
-          <span className="font-mono text-faint">chain {CHAIN_ID}</span>
+        <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-10">
+          <div className="flex items-center gap-3">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/gridora-mark.svg" alt="" width={30} height={30} />
+            <div>
+              <div className="font-sans text-sm font-semibold tracking-tight text-fg">gridora</div>
+              <div className="text-xs text-muted">Verifiable grid agent on BNB Chain</div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1 text-xs text-muted sm:items-end">
+            <span>BNB Hack: AI Trading Agent Edition · CoinMarketCap × Trust Wallet × BNB Chain</span>
+            <span className="font-mono text-faint">chain {CHAIN_ID}</span>
+          </div>
         </div>
       </footer>
     </div>

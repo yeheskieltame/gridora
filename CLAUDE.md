@@ -1,4 +1,4 @@
-# CLAUDE.md — Gridora (repo root)
+# CLAUDE.md: Gridora (repo root)
 
 **Verifiable, non-custodial adaptive-grid trading agent on BNB Chain.**
 Built for **BNB Hack: AI Trading Agent Edition** (CoinMarketCap × Trust Wallet × BNB Chain).
@@ -10,12 +10,12 @@ Full concept and strategy: see [`Gridora-Plan.md`](./Gridora-Plan.md).
 
 Gridora runs an **adaptive maker-style grid** on BSC. It buys dips / sells rips inside a
 band, biases with the regime, re-centers when price leaves the band, and halts on a
-circuit breaker. Keys never leave the machine — **every order is signed locally through
+circuit breaker. Keys never leave the machine; **every order is signed locally through
 the Trust Wallet Agent Kit (TWAK)**. Market data comes from the **CoinMarketCap AI Agent
 Hub**, paid per call via **x402** through TWAK. Every settled trade is mirrored on-chain
 and shown on a public read-only verifier.
 
-## ⭐ Reference projects (we are PORTING these — copy from them, don't reinvent)
+## Reference projects (we are PORTING these, copy from them, don't reinvent)
 
 Two of our own working repos are the source of truth. Open them side by side:
 
@@ -34,7 +34,7 @@ Key files to lift (with their original paths):
 - GridService facade → `perps-agent/backend/src/perpsagent/app/service.py`
 - Agent loop (sense→recall→decide→commit→execute→learn) → `perps-agent/backend/src/perpsagent/agent/loop.py`
 - x402 pay-per-call → `perps-agent/backend/src/perpsagent/adapters/payments/x402.py`
-- On-chain spot-grid structural reference (limit-order→level mapping) → `perps-agent/backend/src/perpsagent/adapters/exchanges/mantle_dex/adapter.py` — but Gridora's venue is **PancakeSwap via TWAK-native swap + limit orders** (`twak swap` / `twak automate add`), NOT iZiSwap.
+- On-chain spot-grid structural reference (limit-order→level mapping) → `perps-agent/backend/src/perpsagent/adapters/exchanges/mantle_dex/adapter.py` (but Gridora's venue is **PancakeSwap via TWAK-native swap + limit orders** (`twak swap` / `twak automate add`), NOT iZiSwap).
 - ERC-8004 identity + append-only journal contracts → `BridgeAgent/contracts/src/{IdentityRegistry,TradeJournal}.sol`
 - Read-only verifier web (viem, no wallet connect) → `BridgeAgent/web/{app/page.tsx,lib/data.ts,components/*}`
 
@@ -56,13 +56,13 @@ state directly (viem) and, if needed, talks to the backend only through the type
 
 Every venue implements one **`ExchangePort`** (`domain/ports.py`). Add a venue = one folder
 under `adapters/exchanges/` + a `registry.py` entry. The engine and agent never change.
-For Gridora the only execution adapter is **`bsc_twak`** — it signs through TWAK. This is
+For Gridora the only execution adapter is **`bsc_twak`**, which signs through TWAK. This is
 the centerpiece of the "Best Use of TWAK" prize: TWAK is the *sole* execution layer.
 
 **Verified TWAK-native integration (CLI `twak … --json`; chain keys `bsc`/`bsctestnet`):**
-- Execution = **PancakeSwap** via `twak automate add` (maker **limit order** per grid level, 1:1) with `twak swap` as the taker fallback (`swap_fallback`). A `twak serve --watch` watcher executes resting orders. No hand-rolled router calldata — TWAK resolves tokens by symbol + signs locally.
+- Execution = **PancakeSwap** via `twak automate add` (maker **limit order** per grid level, 1:1) with `twak swap` as the taker fallback (`swap_fallback`). A `twak serve --watch` watcher executes resting orders. No hand-rolled router calldata; TWAK resolves tokens by symbol + signs locally.
 - Data = `twak x402 request <cmc-url>` (TWAK pays the x402 micropayment + returns the resource).
-- **Proofs/identity = TWAK-native ERC-8004** (`twak erc8004 register` + `set-metadata` for commit/attest) — TWAK can't sign arbitrary contract calls, so the custom `contracts/` are an **optional** read-only mirror, not the primary proof path.
+- **Proofs/identity = TWAK-native ERC-8004** (`twak erc8004 register` + `set-metadata` for commit/attest); TWAK can't sign arbitrary contract calls, so the custom `contracts/` are an **optional** read-only mirror, not the primary proof path.
 - Registration = `twak compete register` (registry `0x212c…Aed5`).
 - **Strategy routing = Claude (local Claude Code CLI)** picks/switches/halts grid modes from the CMC regime; deterministic guardrails still hard-enforce. Grids are **fee-aware** (level spacing ≥ 2×fee+slippage+gas).
 
@@ -84,7 +84,7 @@ the centerpiece of the "Best Use of TWAK" prize: TWAK is the *sole* execution la
 
 ## Build order (see Gridora-Plan.md §9 for the dated timeline)
 
-1. `backend/` — fork perps-agent, write the `bsc_twak` ExchangePort + `cmc` SignalPort.
-2. `contracts/` — port BridgeAgent contracts, deploy to BSC.
-3. `frontend/` — port BridgeAgent verifier to read BSC.
+1. `backend/`: fork perps-agent, write the `bsc_twak` ExchangePort + `cmc` SignalPort.
+2. `contracts/`: port BridgeAgent contracts, deploy to BSC.
+3. `frontend/`: port BridgeAgent verifier to read BSC.
 4. Register on-chain, dry-run autonomous mode, demo, submit.

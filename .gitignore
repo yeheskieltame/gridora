@@ -21,3 +21,6 @@ contracts/lib/
 *.sqlite3
 # os
 .DS_Store
+
+# local-only demo video (not source, do not push)
+/video/

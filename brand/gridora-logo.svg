@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<linearGradient id="coral" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F0A878"/><stop offset="0.5" stop-color="#D97757"/><stop offset="1" stop-color="#A85638"/></linearGradient>
+<radialGradient id="vig" cx="0.5" cy="0.42" r="0.75"><stop offset="0" stop-color="#161210"/><stop offset="1" stop-color="#0A0A0A"/></radialGradient>
+<filter id="glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="26"/></filter>
+</defs>
+<rect x="0" y="0" width="1024" height="1024" rx="232" fill="url(#vig)"/>
+<rect x="6" y="6" width="1012" height="1012" rx="226" fill="none" stroke="#D97757" stroke-opacity="0.12" stroke-width="3"/>
+<circle cx="512" cy="512" r="300" fill="#D97757" fill-opacity="0.10" filter="url(#soft)"/>
+<g stroke="url(#coral)" stroke-opacity="0.28" stroke-width="6" stroke-linecap="round">
+<line x1="416.0" y1="224.0" x2="512.0" y2="224.0"/>
+<line x1="512.0" y1="224.0" x2="608.0" y2="224.0"/>
+<line x1="320.0" y1="320.0" x2="320.0" y2="416.0"/>
+<line x1="320.0" y1="416.0" x2="320.0" y2="512.0"/>
+<line x1="320.0" y1="512.0" x2="320.0" y2="608.0"/>
+<line x1="512.0" y1="512.0" x2="608.0" y2="512.0"/>
+<line x1="608.0" y1="512.0" x2="704.0" y2="512.0"/>
+<line x1="704.0" y1="512.0" x2="704.0" y2="608.0"/>
+<line x1="320.0" y1="608.0" x2="320.0" y2="704.0"/>
+<line x1="704.0" y1="608.0" x2="704.0" y2="704.0"/>
+<line x1="416.0" y1="800.0" x2="512.0" y2="800.0"/>
+<line x1="512.0" y1="800.0" x2="608.0" y2="800.0"/>
+</g>
+<g filter="url(#glow)">
+<circle cx="416.0" cy="224.0" r="33" fill="url(#coral)"/>
+<circle cx="512.0" cy="224.0" r="36" fill="url(#coral)"/>
+<circle cx="512.0" cy="224.0" r="19" fill="#FFE9DC"/>
+<circle cx="608.0" cy="224.0" r="33" fill="url(#coral)"/>
+<circle cx="320.0" cy="320.0" r="33" fill="url(#coral)"/>
+<circle cx="704.0" cy="320.0" r="33" fill="url(#coral)"/>
+<circle cx="320.0" cy="416.0" r="33" fill="url(#coral)"/>
+<circle cx="320.0" cy="512.0" r="33" fill="url(#coral)"/>
+<circle cx="512.0" cy="512.0" r="36" fill="url(#coral)"/>
+<circle cx="512.0" cy="512.0" r="19" fill="#FFE9DC"/>
+<circle cx="608.0" cy="512.0" r="33" fill="url(#coral)"/>
+<circle cx="704.0" cy="512.0" r="36" fill="url(#coral)"/>
+<circle cx="704.0" cy="512.0" r="19" fill="#FFE9DC"/>
+<circle cx="320.0" cy="608.0" r="33" fill="url(#coral)"/>
+<circle cx="704.0" cy="608.0" r="33" fill="url(#coral)"/>
+<circle cx="320.0" cy="704.0" r="33" fill="url(#coral)"/>
+<circle cx="704.0" cy="704.0" r="33" fill="url(#coral)"/>
+<circle cx="416.0" cy="800.0" r="33" fill="url(#coral)"/>
+<circle cx="512.0" cy="800.0" r="36" fill="url(#coral)"/>
+<circle cx="512.0" cy="800.0" r="19" fill="#FFE9DC"/>
+<circle cx="608.0" cy="800.0" r="33" fill="url(#coral)"/>
+</g>
+</svg>

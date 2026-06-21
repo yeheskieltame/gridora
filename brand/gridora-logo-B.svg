@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+<linearGradient id="coral" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#F2AE80"/><stop offset="0.5" stop-color="#D97757"/><stop offset="1" stop-color="#A24E32"/></linearGradient>
+<radialGradient id="vig" cx="0.5" cy="0.4" r="0.8"><stop offset="0" stop-color="#15110F"/><stop offset="1" stop-color="#090909"/></radialGradient>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<clipPath id="gclip">
+<path d="M 741.8 704.8 A 300 300 0 1 1 741.8 319.2" fill="none" stroke="#000" stroke-width="128" stroke-linecap="round"/>
+<rect x="506" y="448.0" width="308" height="128" rx="64.0"/>
+</clipPath>
+</defs>
+<rect width="1024" height="1024" rx="232" fill="url(#vig)"/>
+<rect x="6" y="6" width="1012" height="1012" rx="226" fill="none" stroke="#D97757" stroke-opacity="0.12" stroke-width="3"/>
+<g filter="url(#glow)">
+<path d="M 741.8 704.8 A 300 300 0 1 1 741.8 319.2" fill="none" stroke="url(#coral)" stroke-width="128" stroke-linecap="round"/>
+<rect x="506" y="448.0" width="308" height="128" rx="64.0" fill="url(#coral)"/>
+</g>
+<g clip-path="url(#gclip)" stroke="#3a1d12" stroke-opacity="0.55" stroke-width="6">
+<line x1="180" y1="160" x2="180" y2="864"/>
+<line x1="232" y1="160" x2="232" y2="864"/>
+<line x1="284" y1="160" x2="284" y2="864"/>
+<line x1="336" y1="160" x2="336" y2="864"/>
+<line x1="388" y1="160" x2="388" y2="864"/>
+<line x1="440" y1="160" x2="440" y2="864"/>
+<line x1="492" y1="160" x2="492" y2="864"/>
+<line x1="544" y1="160" x2="544" y2="864"/>
+<line x1="596" y1="160" x2="596" y2="864"/>
+<line x1="648" y1="160" x2="648" y2="864"/>
+<line x1="700" y1="160" x2="700" y2="864"/>
+<line x1="752" y1="160" x2="752" y2="864"/>
+<line x1="804" y1="160" x2="804" y2="864"/>
+<line x1="856" y1="160" x2="856" y2="864"/>
+<line x1="160" y1="180" x2="864" y2="180"/>
+<line x1="160" y1="232" x2="864" y2="232"/>
+<line x1="160" y1="284" x2="864" y2="284"/>
+<line x1="160" y1="336" x2="864" y2="336"/>
+<line x1="160" y1="388" x2="864" y2="388"/>
+<line x1="160" y1="440" x2="864" y2="440"/>
+<line x1="160" y1="492" x2="864" y2="492"/>
+<line x1="160" y1="544" x2="864" y2="544"/>
+<line x1="160" y1="596" x2="864" y2="596"/>
+<line x1="160" y1="648" x2="864" y2="648"/>
+<line x1="160" y1="700" x2="864" y2="700"/>
+<line x1="160" y1="752" x2="864" y2="752"/>
+<line x1="160" y1="804" x2="864" y2="804"/>
+<line x1="160" y1="856" x2="864" y2="856"/>
+</g>
+<g filter="url(#glow)">
+<circle cx="806.0" cy="512.0" r="30" fill="#FFE9DC"/>
+<circle cx="741.8" cy="704.8" r="30" fill="#FFE9DC"/>
+<circle cx="741.8" cy="319.2" r="30" fill="#FFE9DC"/>
+</g>
+</svg>

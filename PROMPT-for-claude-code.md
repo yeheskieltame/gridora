@@ -1,4 +1,4 @@
-# Prompt untuk Claude Code — Gridora (lanjutan)
+# Prompt untuk Claude Code: Gridora (lanjutan)
 
 Salin semuanya di bawah ini ke Claude Code.
 
@@ -6,10 +6,10 @@ Salin semuanya di bawah ini ke Claude Code.
 
 Kamu melanjutkan project **Gridora** (folder ini). Baca `CLAUDE.md`, `Gridora-Plan.md`,
 dan seluruh `backend/`, `contracts/`, `frontend/` sebelum mengubah apa pun. Jangan buat
-ulang yang sudah ada — project ini hasil porting dari dua repo kami:
+ulang yang sudah ada, project ini hasil porting dari dua repo kami:
 `/Users/kiel/Documents/Hacathon/perps-agent` dan `/Users/kiel/Documents/Hacathon/BridgeAgent`.
 
-## Kejelasan goal (PENTING — ada koreksi arsitektur)
+## Kejelasan goal (PENTING, ada koreksi arsitektur)
 
 Gridora = agen grid-trading adaptif, non-custodial, verifiable, untuk **BNB Hack: AI
 Trading Agent Edition** (Track 1 + special prize *Best Use of Trust Wallet Agent Kit*).
@@ -27,7 +27,7 @@ Fakta kompetisi yang harus jadi pegangan (jangan menyimpang):
   `0x212c61b9b72c95d95bf29cf032f5e5635629aed5` via `twak compete register` /
   MCP `competition_register`.
 
-## Langkah 0 — Audit dulu, lapor sebelum ngoding besar
+## Langkah 0: Audit dulu, lapor sebelum ngoding besar
 
 1. Jalankan `cd backend && PYTHONPATH=src python -m pytest -q` dan
    `PYTHONPATH=src python -m gridora.runner --mode dry --market CAKE/USDT`. Laporkan hasil.
@@ -44,9 +44,9 @@ Fakta kompetisi yang harus jadi pegangan (jangan menyimpang):
    hanya dipakai untuk `sign_and_send`. Ubah supaya eksekusi memakai **action native TWAK**:
    - Tambah method di `TwakClient`: `swap(...)` dan `place_limit_order(...)` /
      `cancel_limit_order(...)` yang memanggil aksi TWAK (MCP/REST/CLI). **Verifikasi nama
-     aksi & parameter persisnya dari dokumentasi TWAK** (portal.trustwallet.com) — jangan
+     aksi & parameter persisnya dari dokumentasi TWAK** (portal.trustwallet.com). Jangan
      menebak; kalau belum yakin, beri TODO jelas + tipe yang benar.
-   - `BscTwakExchange.place_order()` → pakai **limit order TWAK** (maker grid 1:1 ke level).
+   - `BscTwakExchange.place_order()` pakai **limit order TWAK** (maker grid 1:1 ke level).
      Ini lebih baik dari synthetic-swap dan menambah kedalaman integrasi TWAK.
    - Pertahankan jalur **swap PancakeSwap (router) sebagai fallback** saja, di belakang flag,
      untuk pair yang tidak punya limit order. Jangan dihapus, tapi bukan jalur utama.
@@ -57,9 +57,9 @@ Fakta kompetisi yang harus jadi pegangan (jangan menyimpang):
    Hapus ketergantungan pada `IZISWAP_LIMIT_ORDER_MANAGER` di jalur utama. Boleh simpan satu
    komentar "opsi alternatif limit-order DEX" tapi jangan ada konstanta kosong yang dipakai
    import. Pastikan tidak ada referензi iZiSwap yang bikin bingung di `Gridora-Plan.md`,
-   `CLAUDE.md`, dan docstring — venue resmi adalah **PancakeSwap (atau limit order native TWAK)**.
+   `CLAUDE.md`, dan docstring. Venue resmi adalah **PancakeSwap (atau limit order native TWAK)**.
 
-3. **Grid harus sadar biaya (fee-aware) — kalau belum ada, tambahkan.**
+3. **Grid harus sadar biaya (fee-aware), kalau belum ada, tambahkan.**
    Karena ada simulated tx cost + fee PancakeSwap (V2 = 0.25%; V3 stable bisa 0.01–0.05%),
    tiap pasangan buy/sell harus menutup biaya round-trip. Tambahkan guard di `app/service.py`
    (`config_for_preset`) atau `domain/grid.py`: **tolak/lebarkan grid jika jarak antar-level
@@ -71,7 +71,7 @@ Fakta kompetisi yang harus jadi pegangan (jangan menyimpang):
 4. **Allowlist 149 token lengkap.** `adapters/signals/allowlist.py` masih subset. Lengkapi
    ke 149 token dari brief. `bsc_tokens.py` lengkapi address+decimals untuk token yang
    realistis kita tradекан (minimal semua stable + 15–20 alt likuid). **Verifikasi tiap
-   address dari sumber resmi (BscScan/PancakeSwap)** — salah address = kehilangan dana.
+   address dari sumber resmi (BscScan/PancakeSwap)**. Salah address = kehilangan dana.
 5. **Address testnet (chainId 97).** Sediakan tabel token & router PancakeSwap untuk testnet,
    karena default kita testnet. Pastikan `config.guard()` menolak mismatch env↔chain.
 6. **TwakClient real.** Implementasikan transport ke TWAK (pilih satu: MCP / REST / CLI),
