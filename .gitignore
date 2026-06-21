@@ -1,0 +1,23 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+.env
+.secrets/
+# node
+node_modules/
+.next/
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+contracts/lib/
+# python caches
+.pytest_cache/
+.ruff_cache/
+# local run artifacts (paper/sqlite stores — no secrets, but not source)
+*.db
+*.sqlite
+*.sqlite3
+# os
+.DS_Store

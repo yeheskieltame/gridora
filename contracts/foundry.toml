@@ -1,0 +1,16 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.24"
+optimizer = true
+optimizer_runs = 1000   # read/record-heavy verifier — favor runtime gas
+
+# BNB Smart Chain
+[rpc_endpoints]
+bsc      = "${BSC_RPC_URL}"
+bsc_test = "${BSC_TESTNET_RPC_URL}"
+
+[etherscan]
+bsc      = { key = "${BSCSCAN_API_KEY}", chain = 56 }
+bsc_test = { key = "${BSCSCAN_API_KEY}", chain = 97 }

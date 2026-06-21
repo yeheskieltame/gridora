@@ -1,0 +1,26 @@
+[project]
+name = "gridora"
+version = "0.1.0"
+description = "Verifiable non-custodial adaptive-grid trading agent on BNB Chain (TWAK + CMC)"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27",
+  "web3>=6.15",
+  "eth-account>=0.11",
+  "pydantic>=2.6",
+  "textual>=0.80",  # TUI dashboard (the verifier/operator display)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.5"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gridora"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+asyncio_mode = "auto"
