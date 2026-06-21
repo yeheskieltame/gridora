@@ -200,7 +200,7 @@ We're porting, not building from scratch, so the schedule is realistic.
 
 ## Team
 
-Yeheskiel Yunus Tame ([@YeheskielTame](https://x.com/YeheskielTame)) · Bima Jadiva ([@BimaJadiva07](https://x.com/BimaJadiva07))
+Yeheskiel Yunus Tame ([@YeheskielTame](https://x.com/YeheskielTame))
 
 ## Sources
 

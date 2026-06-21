@@ -198,4 +198,4 @@ See [`frontend/web/public/README.md`](./frontend/web/public/README.md). Brand co
 
 ## Team
 
-Yeheskiel Yunus Tame ([@YeheskielTame](https://x.com/YeheskielTame)) and Bima Jadiva ([@BimaJadiva07](https://x.com/BimaJadiva07)).
+Yeheskiel Yunus Tame ([@YeheskielTame](https://x.com/YeheskielTame)).
