@@ -199,8 +199,10 @@ async def _dry_simulate(sup, base_mid: Decimal) -> None:
 
 
 async def run_agentic(mode: str, market: str, margin: Decimal, brain_kind: str,
-                      auto_select: bool = False) -> None:
-    """Claude-routed agent (the agentic path) behind the Textual TUI."""
+                      auto_select: bool = False, serve_port: int | None = None,
+                      headless: bool = False) -> None:
+    """Claude-routed agent (the agentic path) behind the Textual TUI and/or the web
+    console (--serve exposes the control API; headless = no TUI, web cockpit only)."""
     from .agent.state import GridoraState
     from .agent.supervisor import AgentSupervisor
     from .tui.app import GridoraTUI
@@ -265,7 +267,26 @@ async def run_agentic(mode: str, market: str, margin: Decimal, brain_kind: str,
         # paper/live need a periodic monitor (recenter + guard checks); dry drives it via the sim.
         recenter_interval=(settings.recenter_interval_s or (15.0 if mode in ("paper", "live") else 0.0)),
         auto_select=auto_select, exchange_for=exchange_for)   # factory enables token rotation across the allowlist   # paper/dry exchange is bound to one market
-    await GridoraTUI(sup, simulate=simulate).run_async()
+
+    if serve_port:
+        from .control_api import ControlServer
+        api = ControlServer(sup, asyncio.get_running_loop(),
+                            host=settings.control_host, port=serve_port,
+                            owners=settings.owner_address,
+                            cors_origin=settings.control_cors_origin)
+        api.start()
+        lock = "" if settings.owner_address else " (GRIDORA_OWNER allowlist empty — read-only)"
+        state.add_log(f"control API on http://{settings.control_host}:{serve_port}{lock}")
+
+    if headless:
+        # Web-console-only cockpit: same lifecycle the TUI drives, minus Textual.
+        if simulate is not None:
+            await sup.boot()
+            await simulate(sup)
+        else:
+            await sup.run_forever(decide_interval=60.0)
+    else:
+        await GridoraTUI(sup, simulate=simulate).run_async()
 
 
 def _paper_adapters(margin: Decimal):
@@ -361,6 +382,9 @@ async def main() -> None:
     ap.add_argument("--preset", default=None, choices=[p.value for p in RiskPreset])
     ap.add_argument("--margin", default=None, help="quote (stablecoin) margin to deploy")
     ap.add_argument("--ui", action="store_true", help="launch the Textual TUI (agentic, Claude-routed)")
+    ap.add_argument("--serve", type=int, nargs="?", const=8317, default=None, metavar="PORT",
+                    help="expose the web control API (default port 8317) for the /console "
+                         "cockpit; without --ui the agent runs headless behind it")
     ap.add_argument("--auto", action="store_true",
                     help="auto-select the focus token from the allowlist by liquidity+momentum (agentic)")
     ap.add_argument("--brain", choices=["fake", "claude"], default=None,
@@ -383,8 +407,9 @@ async def main() -> None:
 
     if args.portfolio:
         await run_portfolio(args.mode, margin, args.markets)
-    elif args.ui:
-        await run_agentic(args.mode, args.market, margin, brain_kind, auto_select=args.auto)
+    elif args.ui or args.serve is not None:
+        await run_agentic(args.mode, args.market, margin, brain_kind, auto_select=args.auto,
+                          serve_port=args.serve, headless=not args.ui)
     elif args.mode == "dry":
         await run_dry(args.market, preset, margin)
     elif args.mode == "paper":

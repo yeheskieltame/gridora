@@ -53,6 +53,13 @@ class Settings:
     )
     testnet: bool = os.getenv("GRIDORA_TESTNET", "true").lower() == "true"
     agent_address: str = os.getenv("GRIDORA_AGENT_ADDRESS", "")  # TWAK-controlled wallet
+    # Wallets allowed to drive the web console — comma-separated allowlist
+    # (e.g. GRIDORA_OWNER=0xabc…,0xdef…). Empty = controls locked (default-deny).
+    owner_address: str = os.getenv("GRIDORA_OWNER", "")
+    control_host: str = os.getenv("GRIDORA_CONTROL_HOST", "127.0.0.1")  # 0.0.0.0 on a VPS
+    # CORS origin echoed by the control API; "*" = open (dev default). On a VPS set
+    # it to the deployed console origin (e.g. https://gridora.vercel.app).
+    control_cors_origin: str = os.getenv("GRIDORA_CORS_ORIGIN", "*")
     agent_uri: str = os.getenv("GRIDORA_AGENT_URI", "ipfs://gridora-agent.json")  # ERC-8004 registration file
 
     # TWAK auth — set TWAK_ACCESS_ID / TWAK_HMAC_SECRET in .env; `twak` reads them after `twak init`.
