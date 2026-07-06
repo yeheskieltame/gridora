@@ -102,10 +102,10 @@ export function LandingSections() {
                 open the verifier <span aria-hidden>→</span>
               </a>
               <a
-                href="https://github.com/yeheskieltame/gridora#quickstart"
+                href="/console"
                 className="inline-flex items-center justify-center gap-1.5 bg-brand-green text-black text-[14px] lowercase rounded-full px-6 py-3 font-medium hover:brightness-95 transition-colors"
               >
-                run your own agent <span aria-hidden>→</span>
+                open the console <span aria-hidden>→</span>
               </a>
             </div>
           </div>
@@ -119,7 +119,6 @@ export function LandingSections() {
           <nav className="flex flex-wrap items-center gap-5">
             <a href="/verifier" className="hover:text-[#1a1a1a] transition-colors">verifier</a>
             <a href="/console" className="hover:text-[#1a1a1a] transition-colors">console</a>
-            <a href="https://github.com/yeheskieltame/gridora" className="hover:text-[#1a1a1a] transition-colors">github</a>
             <a href="https://www.8004scan.io/agents" className="hover:text-[#1a1a1a] transition-colors">erc-8004 #140004</a>
           </nav>
         </div>

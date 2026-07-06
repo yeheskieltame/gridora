@@ -8,7 +8,6 @@ const LINKS = [
   { label: "how it works", href: "/#how-it-works" },
   { label: "verifier", href: "/verifier" },
   { label: "console", href: "/console" },
-  { label: "github", href: "https://github.com/yeheskieltame/gridora" },
 ];
 
 function Clover({ className }: { className?: string }) {
@@ -52,10 +51,10 @@ export function LandingNavbar() {
         {/* right: docs + CTA + hamburger */}
         <div className="col-span-6 md:col-span-3 flex items-center justify-end gap-4">
           <a
-            href="https://github.com/yeheskieltame/gridora#quickstart"
+            href="/verifier"
             className="hidden sm:block text-[13px] lowercase text-[#1a1a1a]/70 hover:text-[#1a1a1a] transition-colors"
           >
-            docs
+            live proof
           </a>
           <a
             href="/#get-started"
