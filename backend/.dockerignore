@@ -1,0 +1,22 @@
+# secrets — NEVER baked into the image (provided at runtime via env_file / -e)
+.env
+.secrets/
+
+# local run artifacts
+*.log
+*.db
+*.sqlite
+*.sqlite3
+.bt_cache/
+
+# python noise
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# not needed at runtime
+tests/
+scripts/
+CLAUDE.md

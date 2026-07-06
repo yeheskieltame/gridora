@@ -1,0 +1,55 @@
+# Gridora — self-host your own agent (non-custodial: YOUR TWAK wallet, YOUR keys).
+#
+#   cp backend/.env.example backend/.env    # then paste your values
+#   docker compose up -d --build
+#   curl localhost:8317/api/state           # your agent, live
+#
+# Starts in PAPER mode: real live prices, simulated fills, NO real money.
+# Console: point NEXT_PUBLIC_CONTROL_API at http://<host>:8317 and open /console.
+
+services:
+  agent:
+    build: ./backend
+    env_file: ./backend/.env            # your config/keys — gitignored, never baked into the image
+    ports:
+      - "8317:8317"                     # control API (GET /api/state is public; controls are
+                                        # wallet-signature gated by the GRIDORA_OWNER allowlist).
+                                        # On a public VPS prefer "127.0.0.1:8317:8317" with a
+                                        # TLS reverse proxy (Caddy/nginx) in front.
+    restart: unless-stopped
+    volumes:
+      - gridora-data:/root/.gridora     # paper db, trade ledger, autopilot state
+      - gridora-twak:/root/.twak        # TWAK wallet/config (docker compose exec agent twak init)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8317/api/state', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    # ────────────────────────────────────────────────────────────────────────
+    # ⚠️ ⚠️  FLIPPING TO LIVE MODE TRADES REAL MONEY WITH YOUR WALLET  ⚠️ ⚠️
+    #
+    # The image default (backend/Dockerfile CMD) is paper mode — it cannot
+    # spend anything. To go LIVE you must do BOTH of these, deliberately:
+    #
+    #   1. In backend/.env set:
+    #        GRIDORA_TESTNET=false
+    #        GRIDORA_CHAIN_ID=56
+    #        GRIDORA_BSC_RPC_URL=https://bsc-dataseed.bnbchain.org
+    #        TWAK_ACCESS_ID=…   TWAK_HMAC_SECRET=…   TWAK_WALLET_PASSWORD=…
+    #      and create + fund the agent wallet:
+    #        docker compose exec agent twak init
+    #
+    #   2. Uncomment the command override:
+    # command: python -m gridora.runner --mode live --serve 8317 --auto
+    #
+    # The agent will then sign REAL PancakeSwap trades on BSC mainnet with the
+    # TWAK wallet in the gridora-twak volume. Fund it only with what you can
+    # afford to lose, start with a small GRIDORA_QUOTE_MARGIN, and watch
+    # /console before scaling anything. (A 30% drawdown = competition DQ.)
+    # ────────────────────────────────────────────────────────────────────────
+
+volumes:
+  gridora-data:
+  gridora-twak:

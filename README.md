@@ -143,26 +143,57 @@ frontend/   Next.js read-only public Verifier (viem, no wallet connect)
 
 ## Quickstart
 
-```bash
-# contracts (Foundry)
-cd contracts && forge test
-forge script script/Deploy.s.sol --rpc-url bsc_test --broadcast
+Three ways in, depending on who you are.
 
+### 1 · Watch — nothing to install
+
+The public verifier at **https://gridora.vercel.app** reads BNB Chain directly (viem, no wallet connect, no backend). Every agent's ERC-8004 identity, append-only TradeJournal, and commit-then-attest records are on the page. You need nothing but a browser.
+
+### 2 · Run your own agent — 5 minutes with Docker
+
+Gridora is **non-custodial**, so there is no shared cloud agent to sign up for. Each user self-hosts their own agent with their own TWAK wallet; keys never leave their machine. The public verifier reads everyone's proofs on-chain (the TradeJournal is keyed by agentId).
+
+```bash
+git clone https://github.com/yeheskieltame/gridora && cd gridora
+cp backend/.env.example backend/.env     # paste your values (see below)
+docker compose up -d --build
+curl localhost:8317/api/state            # your agent, live
+```
+
+The container starts in **paper mode**: real live prices, simulated fills, **no real money**. It runs keyless out of the box — safe to leave up while you get comfortable. The `.env` values you'll want:
+
+| Variable | What it is |
+|---|---|
+| `TWAK_ACCESS_ID` / `TWAK_HMAC_SECRET` | Trust Wallet Agent Kit API creds, from [portal.trustwallet.com](https://portal.trustwallet.com) (live mode only) |
+| `TWAK_WALLET_PASSWORD` | password for the agent wallet TWAK creates (`docker compose exec agent twak init`) |
+| `GRIDORA_OWNER` | comma-separated wallet addresses allowed to drive the console; empty = controls locked, read-only |
+| `GRIDORA_CONTROL_HOST` | already `0.0.0.0` inside the container. On a public VPS, publish the port as `127.0.0.1:8317:8317` and put a TLS reverse proxy (Caddy/nginx) in front — the control API itself is plain HTTP |
+
+**Console.** Point the operator console at your agent — set `NEXT_PUBLIC_CONTROL_API=http://your-host:8317` in `frontend/web/.env` and open `/console`. Your browser wallet only signs a login message (SIWE-lite), never a transaction.
+
+> **⚠️ Flipping to live mode trades real money.**
+> Live mode signs real PancakeSwap trades on BSC mainnet with **your** wallet. Going live takes two deliberate steps: set `GRIDORA_TESTNET=false`, `GRIDORA_CHAIN_ID=56`, a mainnet `GRIDORA_BSC_RPC_URL`, and your TWAK creds in `backend/.env`, then uncomment the `command:` override in `docker-compose.yml`. Fund the TWAK wallet only with what you can afford to lose, start with a small `GRIDORA_QUOTE_MARGIN`, and watch `/console`. The competition disqualifies a 30% drawdown.
+
+### 3 · Develop
+
+```bash
 # backend (Python 3.11)
 cd backend && python3.11 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]" && pytest
-
+pip install -e ".[dev]" && pytest                             # offline, no keys
 python -m gridora.runner --mode dry  --market CAKE/USDT       # offline loop check
 python -m gridora.runner --mode dry  --ui --brain claude      # TUI, real Claude routing
 python -m gridora.runner --mode paper --auto                  # live data, simulated fills, no money
-python -m scripts.backtest                                    # performance backtest
+
+# contracts (Foundry)
+cd contracts && forge test
+forge script script/Deploy.s.sol --rpc-url bsc_test --broadcast
 
 # frontend
 cd frontend/web && pnpm install && cp .env.example .env       # fill deployed addresses
 pnpm dev                                                       # http://localhost:3000
 ```
 
-Paper mode rotates across the allowlist, picks the most tradeable token by volatility and liquidity, and records every simulated fill. Watch it live in the TUI. Press `d` to decide now, `k` to kill to flat, `q` to quit.
+Paper mode rotates across the allowlist, picks the most tradeable token by volatility and liquidity, and records every simulated fill. Watch it live in the TUI (`--ui`). Press `d` to decide now, `k` to kill to flat, `q` to quit.
 
 ---
 
@@ -192,6 +223,10 @@ The agent proves work two ways. The primary identity is the TWAK-native ERC-8004
 python -m gridora.adapters.chain.bsc_mirror register
 python -m gridora.adapters.chain.bsc_mirror status
 ```
+
+### Ecosystem
+
+Gridora's identity is a standard **ERC-8004** agent — agentId `140004` on BNB Chain, browsable on [8004scan.io](https://8004scan.io). It is built on the same TWAK + x402 + ERC-8004 stack as BNB Agent Studio, so any tooling that speaks that stack (registries, reputation, explorers) picks Gridora up for free.
 
 ## Defaults and safety
 

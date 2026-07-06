@@ -21,7 +21,7 @@ self-hosted verifier UI to read your own contracts.
 ```bash
 cd contracts
 forge install foundry-rs/forge-std OpenZeppelin/openzeppelin-contracts  # populates lib/ (gitignored); remappings.txt is committed
-forge test                                # 14 tests, offline
+forge test                                # 20 tests, offline
 forge script script/Deploy.s.sol --rpc-url bsc --broadcast --verify     # mainnet; testnet not used (TWAK has no bsctestnet)
 ```
 Copy printed addresses into `backend/.env` (GRIDORA_*_ADDR) and `frontend/web/.env`.

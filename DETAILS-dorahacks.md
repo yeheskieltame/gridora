@@ -87,8 +87,8 @@ Run modes: `dry` is fully offline, `paper` uses live prices with simulated fills
 **Everything is live on BNB Smart Chain mainnet (chainId 56).** The agent is registered for the competition and the full verifiable proof stack is deployed and readable right now.
 
 - **Agent wallet:** [0x7053676258ef5bFB9b27FCF42092F13fB37B9989](https://bscscan.com/address/0x7053676258ef5bFB9b27FCF42092F13fB37B9989)
-- **Competition registration:** registered (confirmed via compete status)
-- **Registration tx:** [0x11137b00830122e2949620920e6538ccf7c3cb915706cf55e8231f7ea253f692](https://bscscan.com/tx/0x11137b00830122e2949620920e6538ccf7c3cb915706cf55e8231f7ea253f692)
+- **Competition registration:** registered, [proof tx on BscScan](https://bscscan.com/tx/0x11137b00830122e2949620920e6538ccf7c3cb915706cf55e8231f7ea253f692)
+- **ERC-8004 identity:** agentId 140004, URI https://gridora.vercel.app
 - **BNB Hack competition contract:** [0x212c61b9b72c95d95bf29cf032f5e5635629aed5](https://bscscan.com/address/0x212c61b9b72c95d95bf29cf032f5e5635629aed5)
 - **IdentityRegistry (ERC-8004):** [0x400B0D1a98735871175D3B3C231A6250322ECA5A](https://bscscan.com/address/0x400B0D1a98735871175D3B3C231A6250322ECA5A)
 - **TradeJournal:** [0xE946C28ea10bf29AcA9a094f66079De84a50d409](https://bscscan.com/address/0xE946C28ea10bf29AcA9a094f66079De84a50d409)

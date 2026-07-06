@@ -44,13 +44,17 @@ Key files to lift (with their original paths):
 |---|---|
 | `backend/` | Python engine, hexagonal adapters, agent loop, GridService facade |
 | `contracts/` | Foundry (Solidity): IdentityRegistry · TradeJournal · StrategyLedger |
-| `frontend/` | Next.js read-only public Verifier page (viem reads, no wallet connect) |
+| `frontend/` | Next.js: public Verifier (`/`, viem reads) + operator Console (`/console`, wallet-gated controls via the backend control API) |
 
 ## The one cross-team rule
 
 The UI **never imports the engine, adapters, or any chain/wallet SDK**. It reads on-chain
-state directly (viem) and, if needed, talks to the backend only through the typed
-**`GridService`** facade (`backend/src/gridora/app/service.py`). Keep that seam small.
+state directly (viem) and talks to the backend only through the typed **`GridService`**
+facade (`backend/src/gridora/app/service.py`) / its HTTP projection, the **control API**
+(`backend/src/gridora/control_api.py`, exposed by `runner --serve`). Keep that seam small.
+Console controls are default-deny: they require a wallet signature from the
+`GRIDORA_OWNER` allowlist (comma-separated addresses); the browser wallet only signs
+the login message, never transactions.
 
 ## Modular venues (hexagonal)
 

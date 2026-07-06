@@ -20,8 +20,11 @@ contracts/lib/
 *.db
 *.sqlite
 *.sqlite3
+backend/*.log
+backend/.bt_cache/
 # os
 .DS_Store
 
 # local-only demo video (not source, do not push)
 /video/
+scripts-local/
