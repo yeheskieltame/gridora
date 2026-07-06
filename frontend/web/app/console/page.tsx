@@ -630,7 +630,7 @@ export default function ConsolePage() {
             <p className="mt-3 border-t border-line/70 pt-2 text-[11px] leading-relaxed text-muted">
               Config hash committed <em>before</em> trading, outcome attested after —
               audit it on the{" "}
-              <a href="/" className="link-quiet text-accent">
+              <a href="/verifier" className="link-quiet text-accent">
                 public verifier
               </a>
               .

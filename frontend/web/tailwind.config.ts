@@ -21,6 +21,9 @@ const config: Config = {
         accent: "rgb(var(--accent) / <alpha-value>)",  // BNB gold brand accent
         pos: "rgb(var(--pos) / <alpha-value>)",        // profit
         neg: "rgb(var(--neg) / <alpha-value>)",        // loss
+        // Landing page fixed palette (theme-independent — the landing is always light).
+        "bg-base": "#EDEEF5",
+        "brand-green": "#9fff00",
         // Raw BNB gold scale (kept for the wordmark glyph + fixed marks).
         gold: {
           50: "#fdf8e7", 100: "#faedbf", 200: "#f5dc84", 300: "#efc94a",
@@ -35,6 +38,8 @@ const config: Config = {
         display: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
         mono: ["JetBrains Mono Variable", "JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
         serif: ["Instrument Serif", "ui-serif", "Georgia", "serif"],
+        // Landing display font (next/font Outfit sets --font-outfit on the landing root).
+        outfit: ["var(--font-outfit)", "Outfit", "ui-sans-serif", "sans-serif"],
       },
       animation: {
         "pulse-soft": "pulse-soft 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
