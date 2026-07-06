@@ -179,6 +179,7 @@ class TokenMetric:
     symbol: str
     price_usd: Decimal = Decimal(0)
     vol_24h_usd: Decimal = Decimal(0)
+    pct_1h: float = 0.0          # short-term momentum — used to detect a rising move STALLING (profit-lock)
     pct_24h: float = 0.0
     pct_7d: float = 0.0
     range_24h_pct: float = 0.0

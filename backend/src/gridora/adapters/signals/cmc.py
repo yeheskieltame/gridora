@@ -93,12 +93,15 @@ class CmcSignals:
                 continue
             for sym, entry in (body.get("data") or {}).items():
                 if isinstance(entry, list):
-                    entry = entry[0] if entry else {}
+                    # CMC returns EVERY token sharing a ticker — pick the real listed one (highest
+                    # market cap), else a junk same-symbol token's stats poison universe selection.
+                    entry = max(entry, key=lambda e: ((e.get("quote") or {}).get("USD") or {}).get("market_cap") or 0) if entry else {}
                 q = ((entry or {}).get("quote") or {}).get("USD") or {}
                 out[sym] = TokenMetric(
                     symbol=sym,
                     price_usd=Decimal(str(q.get("price") or 0)),
                     vol_24h_usd=Decimal(str(q.get("volume_24h") or 0)),
+                    pct_1h=float(q.get("percent_change_1h") or 0),
                     pct_24h=float(q.get("percent_change_24h") or 0),
                     pct_7d=float(q.get("percent_change_7d") or 0))
         return out

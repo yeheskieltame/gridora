@@ -52,15 +52,19 @@ class GridService:
         self.venue = venue
         self._seq = 0
 
-    async def launch(self, market: str, preset: RiskPreset, quote_margin: Decimal) -> LaunchResult:
+    async def launch(self, market: str, preset: RiskPreset, quote_margin: Decimal,
+                     range_24h_pct: float = 0.0) -> LaunchResult:
         """One-tap launch: build a GridConfig from the preset + current mid, tune the
         breaker for the preset's drawdown cap, then run SENSE->RECALL->DECIDE->
-        COMMIT(on-chain)->EXECUTE."""
+        COMMIT(on-chain)->EXECUTE. `range_24h_pct` (>0) volatility-sizes the band TIGHTER
+        than the preset cap (down to the ±1.5% floor) so a ranging token actually crosses
+        levels; 0 = the preset's fixed (wide) half-band."""
         bid, ask = await self.loop.exchange.best_bid_ask(market)
         mid = (bid + ask) / 2
         self._seq += 1
         cfg = self.config_for_preset(
-            new_instance_id(market, self._seq), market, preset, quote_margin, mid, self.venue)
+            new_instance_id(market, self._seq), market, preset, quote_margin, mid, self.venue,
+            range_24h_pct=range_24h_pct)
 
         # Reset per-episode guard state so a relaunch never inherits a tripped/peaked guard,
         # then (re)tune the auto caps for this preset/margin (operator-set caps are kept).

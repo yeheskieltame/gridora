@@ -10,6 +10,7 @@ engine polls price frequently.
 """
 from __future__ import annotations
 
+import asyncio
 import time
 from decimal import Decimal
 from typing import Sequence
@@ -40,16 +41,22 @@ class CoinGeckoSignals:
 
     async def _fetch(self, symbols: Sequence[str]) -> None:
         """Batch-fetch the given symbols from CoinGecko and refresh the cache (keep the
-        highest-volume match per symbol)."""
-        syms = ",".join(sorted({s.lower() for s in symbols if s and s.isascii()}))
-        if not syms:
+        highest-volume match per symbol). CoinGecko 400s on a long `symbols=` list, so
+        chunk it (≤30/call → ~5 calls for the full allowlist, well under the free limit)."""
+        uniq = sorted({s.lower() for s in symbols if s and s.isascii()})
+        if not uniq:
             return
-        try:
-            rows = await self._get(_CG, {"vs_currency": "usd", "symbols": syms,
-                                         "price_change_percentage": "24h,7d", "per_page": 250})
-        except Exception as e:  # noqa: BLE001 — keep last-good cache on a hiccup
-            print(f"  ! coingecko fetch failed: {e}")
-            return
+        rows: list = []
+        for i in range(0, len(uniq), 30):  # ponytail: 30/chunk dodges the URL/symbol-count 400
+            if i:
+                await asyncio.sleep(2.5)   # throttle: free tier 429s on bursts
+            chunk = ",".join(uniq[i:i + 30])
+            try:
+                part = await self._get(_CG, {"vs_currency": "usd", "symbols": chunk,
+                                             "price_change_percentage": "24h,7d", "per_page": 250})
+                rows.extend(part or [])
+            except Exception as e:  # noqa: BLE001 — keep last-good cache on a hiccup
+                print(f"  ! coingecko fetch failed ({chunk[:40]}…): {e}")
         best: dict[str, TokenMetric] = {}
         for row in rows or []:
             sym = str(row.get("symbol", "")).upper()
