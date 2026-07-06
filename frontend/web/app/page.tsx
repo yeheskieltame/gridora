@@ -9,8 +9,9 @@ import { VerifyPanel } from "@/components/VerifyPanel";
 import { Wordmark } from "@/components/Wordmark";
 import { CornerTicks } from "@/components/Sparkline";
 import { GlowCard } from "@/components/GlowCard";
+import { ArrowUpRight } from "@/components/icons";
 import { RPC_URL } from "@/lib/chain";
-import { fetchAgent, fetchStats, fetchTrades, resolveAgentId } from "@/lib/data";
+import { deriveStats, fetchAgent, fetchTradeCount, fetchTrades, resolveAgentId } from "@/lib/data";
 
 export const revalidate = 30; // re-read live chain data at most every 30s
 
@@ -21,8 +22,14 @@ const CHAIN_ID = TESTNET ? 97 : 56;
 export default async function Page() {
   const readAtMs = Date.now();
   const agentId = await resolveAgentId();
-  const [agent, trades] = await Promise.all([fetchAgent(agentId), fetchTrades(agentId)]);
-  const stats = await fetchStats(agentId, trades);
+  // One round of parallel reads — agent info, event detail and the O(1) counter are
+  // independent, so no fetch waterfall; stats are then derived without refetching.
+  const [agent, trades, tradeCount] = await Promise.all([
+    fetchAgent(agentId),
+    fetchTrades(agentId),
+    fetchTradeCount(agentId),
+  ]);
+  const stats = deriveStats(tradeCount, trades);
   // Cumulative PnL (bps), oldest→newest, for the performance sparkline.
   let cum = 0;
   const pnlSeries = [...trades].reverse().map((t) => (cum += Number(t.pnlBps)));
@@ -37,6 +44,16 @@ export default async function Page() {
             <div className="hidden sm:block">
               <LiveBadge readAtMs={readAtMs} network={NETWORK} />
             </div>
+            <a
+              href="/console"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1.5 font-mono text-[11px] text-muted transition-colors hover:border-accent/50 hover:text-fg"
+              title="Operator console — watch live, drive with the owner wallet"
+            >
+              <svg aria-hidden viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 17l6-5-6-5M12 19h8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              console
+            </a>
             <ThemeToggle />
           </div>
         </div>
@@ -152,7 +169,19 @@ export default async function Page() {
           </div>
           <div className="flex flex-col gap-1 text-xs text-muted sm:items-end">
             <span>BNB Hack: AI Trading Agent Edition · CoinMarketCap × Trust Wallet × BNB Chain</span>
-            <span className="font-mono text-faint">chain {CHAIN_ID}</span>
+            <span className="flex items-center gap-3 font-mono text-faint">
+              <a
+                href="https://www.8004scan.io/agents"
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Agent identity on the public ERC-8004 explorer"
+                className="link-quiet group inline-flex items-center gap-1 hover:text-accent"
+              >
+                ERC-8004 #140004
+                <ArrowUpRight className="h-3 w-3 text-faint transition-colors group-hover:text-accent" />
+              </a>
+              <span>chain {CHAIN_ID}</span>
+            </span>
           </div>
         </div>
       </footer>

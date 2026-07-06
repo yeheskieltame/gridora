@@ -9,4 +9,14 @@ export const RPC_URL =
   process.env.NEXT_PUBLIC_BSC_RPC_URL ??
   (CHAIN.id === bsc.id ? "https://bsc-rpc.publicnode.com" : "https://bsc-testnet.publicnode.com");
 export const publicClient = createPublicClient({ chain: CHAIN, transport: http(RPC_URL) });
+
+// Dedicated client for ranged getLogs (the trade history). The main RPC (Alchemy free) caps a
+// single getLogs to 10 blocks, so the journal's events span far more blocks than it can read in
+// one call; NodeReal's free endpoint allows 50k-block ranges → the whole journal reads in ~6 calls.
+// Counters and other reads still use the main client. Falls back to it if this URL is unset.
+const LOGS_RPC_URL = process.env.NEXT_PUBLIC_JOURNAL_LOGS_RPC_URL;
+export const logsClient = LOGS_RPC_URL
+  ? createPublicClient({ chain: CHAIN, transport: http(LOGS_RPC_URL) })
+  : publicClient;
+
 export const EXPLORER = CHAIN.blockExplorers?.default.url ?? "https://bscscan.com";
