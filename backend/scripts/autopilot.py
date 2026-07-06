@@ -115,8 +115,12 @@ def save_state(st: dict) -> None:
     os.replace(tmp, STATE_F)
 
 
+MODE = "paper"  # set once in main(); stamped on every ledger row
+
+
 def ledger(event: dict) -> None:
     os.makedirs(STATE_DIR, exist_ok=True)
+    event["mode"] = MODE
     event["ts"] = time.time()
     event["at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     with open(LEDGER_F, "a") as f:
@@ -457,7 +461,11 @@ def main() -> None:
         selfcheck(); return
     paper = "--paper" in sys.argv
     once = "--once" in sys.argv
+    global MODE
+    MODE = "paper" if paper else "live"
     st = load_state()
+    if not paper:
+        st.pop("paper", None)   # stale paper wallet would mislabel the console badge
     ex = Paper(st) if paper else Live()
     reconcile(st, ex, paper)
     mode = "PAPER" if paper else "LIVE"
