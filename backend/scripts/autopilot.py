@@ -55,7 +55,9 @@ ARM = 0.02               # $ net — ratchet arms the moment we're past break-ev
 FLOOR_MIN = 0.02         # $ net — the floor never sits below break-even
 RIDE_GAP_PCT = 0.015     # trail gap as fraction of cost while BTC is strong (rides runners)
 LOCK_GAP_PCT = 0.007     # tighter gap when BTC turns weak (lock fast)
-CAP_PCT = 0.12           # +12% from fill -> bank the spike instantly
+CAP_PCT = 0.06           # bank a spike at +6% — backtest-derived (2026-07-07, 30d+14d
+                         # windows: 0.06 = only consistently-positive CAP w/ lowest DD;
+                         # 0.12 missed the SLX spike then rode it -70%. See autopilot_backtest)
 FAST_NET_PCT = 0.03      # fast-reversal only once net >= 3% of cost
 FAST_5M = -1.5           # % 5m candle drop that confirms a real reversal
 FAST_TAKER = 30.0        # taker collapse + price off peak also confirms
