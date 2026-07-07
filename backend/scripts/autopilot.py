@@ -68,10 +68,10 @@ RIDE_GAP_PCT = 0.015     # trail gap as fraction of cost while BTC is strong (ri
 LOCK_GAP_PCT = 0.007     # tighter gap when BTC turns weak (lock fast)
 CAP_PCT = 0.06           # kept for autopilot_backtest compatibility; live exits now use the
                          # profile TPs below (scalp mode 2026-07-07: bank fast, compound daily)
-SLOTS = 2                # concurrent positions, distinct tokens. Backtest maximin winner
-                         # (2026-07-07 slots study): 2 slots = ONLY config positive in all
-                         # 3 windows (+1.43/+1.87/+0.58), DD halved vs 1 slot (50%→28%),
-                         # trade count 3×; 3 slots lose to flat-gas drag at $10/slot.
+SLOTS = 1                # capital-dependent (user 2026-07-07): at ~$14 equity a 2-slot
+                         # split = $7/slot where flat gas alone is ~3% — one focused
+                         # all-in beats it. RESTORE SLOTS=2 when equity is back ≥ ~$30
+                         # (the 2-slot config was the backtest maximin winner at $30).
 CALM_TP_PCT = 0.028      # calm: bank at net +2.8% of slot cost (slots study winner —
 SCALP_TP_PCT = 0.018     # wild: net +1.8% — smaller slots need higher % to clear flat gas)
 SCALP_GAP_PCT = 0.005    # wild trail gap — a green wild position never gives back >0.5%
@@ -350,6 +350,69 @@ def hl_whale(sym: str, st: dict) -> dict | None:
     return {"imb": imb, "oi_chg": oi_chg, "funding": ctx["funding"].get(coin)}
 
 
+# ---------- extra alpha sources (2026-07-07: "banyak data sumber alpha") ----------
+# Per-candidate, cross-venue: CMC momentum (1h/24h/7d — Gate tickers only see 24h),
+# CMC Fear&Greed (context for the brain, NOT a gate — measured unreliable as a gate),
+# DexScreener on-chain BSC flow (buys/sells h1 + pool liquidity — a different venue
+# than Gate's CEX tape). All graceful-None: any source down = lens off, bot unaffected.
+_fng_cache: dict = {"ts": 0.0, "v": None}
+
+
+def fng_now() -> int | None:
+    if time.time() - _fng_cache["ts"] < 1800:
+        return _fng_cache["v"]
+    key = os.environ.get("GRIDORA_CMC_API_KEY", "")
+    try:
+        req = urllib.request.Request(
+            "https://pro-api.coinmarketcap.com/v3/fear-and-greed/latest",
+            headers={"X-CMC_PRO_API_KEY": key})
+        v = int(json.load(urllib.request.urlopen(req, timeout=10))["data"]["value"])
+    except Exception:  # noqa: BLE001
+        d = get("https://api.alternative.me/fng/?limit=1&format=json")
+        try:
+            v = int(d["data"][0]["value"])
+        except Exception:  # noqa: BLE001
+            v = None
+    _fng_cache.update(ts=time.time(), v=v)
+    return v
+
+
+def cmc_momentum(sym: str) -> dict | None:
+    """1h/24h/7d %-change from CMC quotes/latest (multi-timeframe alignment)."""
+    key = os.environ.get("GRIDORA_CMC_API_KEY", "")
+    if not key:
+        return None
+    try:
+        req = urllib.request.Request(
+            f"https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?symbol={sym}",
+            headers={"X-CMC_PRO_API_KEY": key})
+        lst = json.load(urllib.request.urlopen(req, timeout=10))["data"][sym]
+        best = max(lst, key=lambda x: (x.get("quote", {}).get("USD", {}).get("market_cap") or 0))
+        u = best["quote"]["USD"]
+        return {"p1h": round(u.get("percent_change_1h") or 0, 2),
+                "p24h": round(u.get("percent_change_24h") or 0, 2),
+                "p7d": round(u.get("percent_change_7d") or 0, 2)}
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def dex_flow(sym: str) -> dict | None:
+    """On-chain BSC flow from DexScreener: best pool's h1 buys/sells + liquidity."""
+    from gridora.adapters.exchanges.bsc_twak.bsc_tokens import BSC_TOKENS
+    addr = BSC_TOKENS.get(sym, (None,))[0]
+    if not addr:
+        return None
+    d = get(f"https://api.dexscreener.com/latest/dex/tokens/{addr}")
+    try:
+        pairs = [p for p in d["pairs"] if p.get("chainId") == "bsc"]
+        best = max(pairs, key=lambda p: (p.get("liquidity", {}).get("usd") or 0))
+        tx = best.get("txns", {}).get("h1", {})
+        return {"liq_usd": int(best.get("liquidity", {}).get("usd") or 0),
+                "buys_h1": tx.get("buys", 0), "sells_h1": tx.get("sells", 0)}
+    except Exception:  # noqa: BLE001
+        return None
+
+
 # ---------- the brain: Claude (Opus) as mandatory pre-entry risk officer ----------
 # The LAB post-mortem's third layer: mechanical filters can't smell token character.
 # Before ANY buy, a headless `claude --print --model opus` call reviews the full brief
@@ -565,14 +628,18 @@ def scan_tick(st: dict, ex) -> None:
         bonus = (w["imb"] - 0.5) * HL_BONUS_W if w else 0.0
         if sym in PRIME:
             bonus += PRIME_BONUS
-        passers.append((s + bonus, sym, r, d, w))
+        dx = dex_flow(sym)
+        if dx and dx["buys_h1"] + dx["sells_h1"] >= 20:   # on-chain flow confirmation
+            ratio = dx["buys_h1"] / max(1, dx["buys_h1"] + dx["sells_h1"])
+            bonus += (ratio - 0.5) * 20                    # 65% buys -> +3
+        passers.append((s + bonus, sym, r, d, w, dx))
     if not passers:
         top = f" | best prefilter: {ranked[0][1]} (turn unconfirmed)" if ranked else ""
         st["pending"] = None
         log(f"scan: no dip-turn ({len(tk)} tickers, {len(ranked)} dips) | {btc}{top}"); return
 
     passers.sort(key=lambda x: -x[0])
-    _, sym, r, d, w = passers[0]
+    _, sym, r, d, w, dx = passers[0]
     p = st.get("pending")
     count = p["count"] + 1 if p and p["sym"] == sym else 1
     st["pending"] = {"sym": sym, "count": count}
@@ -590,7 +657,9 @@ def scan_tick(st: dict, ex) -> None:
              "chg_24h_pct": round(r["chg24"], 1), "taker_buy_pct": round(d["taker"], 0),
              "chg_5m_pct": round(d["m5"], 2), "wild7d_swing_pct": round(d["wild7d"], 0),
              "daily_closes_10d": d["d_closes"],
-             "hyperliquid_whale": w, "btc_regime": btc}
+             "hyperliquid_whale": w, "btc_regime": btc,
+             "cmc_momentum_pct": cmc_momentum(sym), "fear_greed": fng_now(),
+             "onchain_dex_flow_h1": dx}
     v = brain_verdict(sym, brief)
     if v is None:
         log(f"!! brain unavailable for {sym} — entry skipped (no verdict = no entry)")
