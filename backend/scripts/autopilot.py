@@ -62,8 +62,12 @@ RIDE_GAP_PCT = 0.015     # trail gap as fraction of cost while BTC is strong (ri
 LOCK_GAP_PCT = 0.007     # tighter gap when BTC turns weak (lock fast)
 CAP_PCT = 0.06           # kept for autopilot_backtest compatibility; live exits now use the
                          # profile TPs below (scalp mode 2026-07-07: bank fast, compound daily)
-CALM_TP_PCT = 0.020      # calm tokens: bank at net +2.0% of cost (~gross +4%) — fast compounding
-SCALP_TP_PCT = 0.012     # wild tokens: bank at net +1.2% (~gross +3%) — in, profit, OUT
+SLOTS = 2                # concurrent positions, distinct tokens. Backtest maximin winner
+                         # (2026-07-07 slots study): 2 slots = ONLY config positive in all
+                         # 3 windows (+1.43/+1.87/+0.58), DD halved vs 1 slot (50%→28%),
+                         # trade count 3×; 3 slots lose to flat-gas drag at $10/slot.
+CALM_TP_PCT = 0.028      # calm: bank at net +2.8% of slot cost (slots study winner —
+SCALP_TP_PCT = 0.018     # wild: net +1.8% — smaller slots need higher % to clear flat gas)
 SCALP_GAP_PCT = 0.005    # wild trail gap — a green wild position never gives back >0.5%
 FAST_NET_PCT = 0.03      # fast-reversal only once net >= 3% of cost
 FAST_5M = -1.5           # % 5m candle drop that confirms a real reversal
@@ -137,10 +141,25 @@ def notify(title: str, body: str) -> None:
 def load_state() -> dict:
     try:
         with open(STATE_F) as f:
-            return json.load(f)
+            st = json.load(f)
     except Exception:  # noqa: BLE001
-        return {"pos": None, "peak": None, "px_peak": None, "pending": None,
-                "cooldown": {}, "paper": {"USDT": PAPER_USDT}, "last_alert": 0}
+        st = {"pos": None, "peak": None, "px_peak": None, "pending": None,
+              "cooldown": {}, "paper": {"USDT": PAPER_USDT}, "last_alert": 0}
+    # migrate single-position state -> slots (2026-07-07 multi-slot refactor)
+    if "slots" not in st:
+        st["slots"] = []
+        if st.get("pos"):
+            st["slots"] = [{**st["pos"], "peak": st.get("peak"), "px_peak": st.get("px_peak"),
+                            "last_alert": st.get("last_alert", 0)}]
+    return st
+
+
+def sync_mirror(st: dict) -> None:
+    """Keep the legacy single-position keys mirroring slot 0 (console/CLI compat)."""
+    first = st["slots"][0] if st["slots"] else None
+    st["pos"] = first
+    st["peak"] = first.get("peak") if first else None
+    st["px_peak"] = first.get("px_peak") if first else None
 
 
 def save_state(st: dict) -> None:
@@ -423,11 +442,13 @@ class Live:
             return False
         return True
 
-    def buy(self, sym: str) -> tuple[float, float, float] | None:
+    def buy(self, sym: str, amount: float | None = None) -> tuple[float, float, float] | None:
         before = self.usdt()
-        amt = Decimal(str(before)) - RESERVE
+        amt = Decimal(str(amount)) if amount else Decimal(str(before)) - RESERVE
+        if amt > Decimal(str(before)) - RESERVE:
+            amt = Decimal(str(before)) - RESERVE
         if amt < 5:
-            log(f"!! only ${before:.2f} USDT — cannot enter"); return None
+            log(f"!! only ${before:.2f} USDT free — cannot enter"); return None
         got = 0.0
         try:
             got = float(self._run(self.tr.swap("USDT", sym, amt)))
@@ -480,9 +501,10 @@ class Paper:
     def quote_ok(self, sym: str, gate_px: float) -> bool:
         return True
 
-    def buy(self, sym: str) -> tuple[float, float, float] | None:
+    def buy(self, sym: str, amount: float | None = None) -> tuple[float, float, float] | None:
         px = spot_px(sym)
-        amt = self.usdt() - float(RESERVE)
+        free = self.usdt() - float(RESERVE)
+        amt = min(amount, free) if amount else free
         if px is None or amt < 5:
             return None
         qty = amt * (1 - SELL_FRIC) / px       # entry friction mirrors live fills
@@ -517,8 +539,11 @@ def scan_tick(st: dict, ex) -> None:
         if s is not None:
             ranked.append((s, sym, r))
     ranked.sort(reverse=True)
+    held = {sl["sym"] for sl in st["slots"]}
     passers = []
     for s, sym, r in ranked[:5]:
+        if sym in held:
+            continue
         d = deep(sym)
         if not (d and d["base"] and d["up"] and d["taker"] >= TAKER_MIN):
             continue
@@ -570,33 +595,38 @@ def scan_tick(st: dict, ex) -> None:
         log("!! BNB below gas floor — entry skipped"); return
     if not ex.quote_ok(sym, r["px"]):
         st["cooldown"][sym] = now; return
-    fill = ex.buy(sym)
+    free_slots = SLOTS - len(st["slots"])
+    amt = (ex.usdt() - float(RESERVE)) / max(1, free_slots)
+    fill = ex.buy(sym, amt)
     if not fill:
         return
     qty, cost, eff = fill
-    st["pos"] = {"sym": sym, "qty": qty, "cost": cost, "eff": eff, "ts": now, "wild": wild}
-    st["peak"] = None; st["px_peak"] = None; st["last_alert"] = 0
+    st["slots"].append({"sym": sym, "qty": qty, "cost": cost, "eff": eff, "ts": now,
+                        "wild": wild, "peak": None, "px_peak": None, "last_alert": 0})
+    sync_mirror(st)
     ledger({"event": "buy", "sym": sym, "qty": qty, "cost": cost, "eff": eff, "wild": wild,
             "taker": d["taker"], "pos": r["pos"], "wild7d": d["wild7d"],
             "hl_imb": w["imb"] if w else None,
             "hl_oi_chg": w.get("oi_chg") if w else None,
             "hl_funding": w.get("funding") if w else None,
             "llm_confidence": v["confidence"], "llm_reason": v["reason"]})
-    notify("Gridora Autopilot", f"BUY {sym} ${cost:.2f} @ {eff:.6g}")
-    log(f"✅ ALL-IN {qty:.6g} {sym} for ${cost:.2f} @ eff ${eff:.6g} | BE ~${(cost+GAS_USD)/(qty*(1-SELL_FRIC)):.6g}")
+    notify("Gridora Autopilot", f"BUY {sym} ${cost:.2f} @ {eff:.6g} (slot {len(st['slots'])}/{SLOTS})")
+    log(f"✅ BUY slot {len(st['slots'])}/{SLOTS}: {qty:.6g} {sym} for ${cost:.2f} @ eff ${eff:.6g} "
+        f"| BE ~${(cost+GAS_USD)/(qty*(1-SELL_FRIC)):.6g}")
 
 
-def manage_tick(st: dict, ex) -> None:
-    pos = st["pos"]
-    sym, qty, cost = pos["sym"], pos["qty"], pos["cost"]
+def manage_tick(st: dict, ex, i: int) -> None:
+    """Manage slot i (multi-slot: each position exits independently)."""
+    sl_ = st["slots"][i]
+    sym, qty, cost = sl_["sym"], sl_["qty"], sl_["cost"]
     d = deep(sym)
     px = spot_px(sym)
     if px is None:
         return
     n = net_of(qty, px, cost)
-    st["peak"] = n if st["peak"] is None else max(st["peak"], n)
-    st["px_peak"] = px if st["px_peak"] is None else max(st["px_peak"], px)
-    peak = st["peak"]
+    sl_["peak"] = n if sl_["peak"] is None else max(sl_["peak"], n)
+    sl_["px_peak"] = px if sl_["px_peak"] is None else max(sl_["px_peak"], px)
+    peak = sl_["peak"]
     m5, taker = (d["m5"], d["taker"]) if d else (0.0, 50.0)
     btc_ok, btc = btc_gate()
 
@@ -606,16 +636,16 @@ def manage_tick(st: dict, ex) -> None:
             return
         pnl = proceeds - cost
         bps = int(pnl / cost * 10000)
-        st["pos"] = None; st["peak"] = None; st["px_peak"] = None
+        st["slots"].pop(i)
+        sync_mirror(st)
         st["cooldown"][sym] = time.time()
         ledger({"event": "sell", "sym": sym, "qty": qty, "proceeds": proceeds,
                 "net": pnl, "bps": bps, "reason": reason})
         notify("Gridora Autopilot", f"SELL {sym} net ${pnl:+.2f} ({bps:+d}bps) — {reason}")
         log(f"💰 SOLD {sym} -> ${proceeds:.2f} | net ${pnl:+.2f} ({bps:+d}bps) | {reason}")
 
-    # SCALP EXITS (2026-07-07): bank fast, compound daily. Profile TP replaces the old
-    # CAP/fast-reversal riders (both sat above the TP = dead code in scalp mode).
-    wild = bool(pos.get("wild"))
+    # SCALP EXITS: profile TP + never-red trail per slot.
+    wild = bool(sl_.get("wild"))
     tp = (SCALP_TP_PCT if wild else CALM_TP_PCT) * cost
     if n >= tp:
         log(f"TRIGGER=TP {sym} ${px:.6g} net +${n:.2f} >= +${tp:.2f} ({'wild scalp' if wild else 'calm'}) — BANK")
@@ -627,16 +657,16 @@ def manage_tick(st: dict, ex) -> None:
             log(f"TRIGGER=LOCK {sym} ${px:.6g} net +${n:.2f} (floor +${floor:.2f} peak +${peak:.2f})")
             close("trail-lock"); return
 
-    age_h = (time.time() - pos["ts"]) / 3600
-    if n < 0 and age_h >= STUCK_H and time.time() - st["last_alert"] >= REALERT_H * 3600:
-        st["last_alert"] = time.time()
+    age_h = (time.time() - sl_["ts"]) / 3600
+    if n < 0 and age_h >= STUCK_H and time.time() - sl_.get("last_alert", 0) >= REALERT_H * 3600:
+        sl_["last_alert"] = time.time()
         msg = f"{sym} merah ${n:+.2f} sudah {age_h:.0f}h (px ${px:.6g}, taker {taker:.0f}%) — cut atau hold?"
         notify("Gridora Autopilot — STUCK", msg)
         log(f"⚠️ STUCK ALERT: {msg} | HOLDING (never-red; keputusan di user)")
 
     if int(time.time()) % 300 < HOLD_POLL:
         sl = f"+${ratchet_floor(peak, cost*(RIDE_GAP_PCT if btc_ok else LOCK_GAP_PCT)):.2f}" if peak is not None and peak >= ARM else "arms at BE"
-        log(f"[hold {age_h:.1f}h] {sym} ${px:.6g} net ${n:+.2f} SL {sl} peak +${peak or 0:.2f} "
+        log(f"[slot{i+1} {age_h:.1f}h] {sym} ${px:.6g} net ${n:+.2f} SL {sl} peak +${peak or 0:.2f} "
             f"| 5m {m5:+.1f}% taker {taker:.0f}% | {hl_str(hl_whale(sym, st))} | {btc}")
 
 
@@ -645,18 +675,23 @@ def reconcile(st: dict, ex, paper: bool) -> None:
     and a landed swap whose response was lost must not leave holdings unmanaged."""
     if paper:
         return
-    if st["pos"]:
-        sym = st["pos"]["sym"]
+    # per-slot: chain is truth
+    for sl_ in list(st["slots"]):
+        sym = sl_["sym"]
         bal = ex.bal(sym)
-        if bal * st["pos"]["eff"] < 2:
-            log(f"reconcile: state had {sym} but chain shows none — clearing to FLAT")
-            st["pos"] = None; st["peak"] = None; st["px_peak"] = None
-        elif abs(bal - st["pos"]["qty"]) / st["pos"]["qty"] > 0.05:
-            log(f"reconcile: {sym} qty {st['pos']['qty']:.6g} -> {bal:.6g} (chain)")
-            st["pos"]["qty"] = bal
-        return
-    # flat per state — sweep the universe for untracked holdings (boot-only, ~20 RPC reads)
+        if bal * sl_["eff"] < 2:
+            log(f"reconcile: state had {sym} but chain shows none — dropping slot")
+            st["slots"].remove(sl_)
+        elif abs(bal - sl_["qty"]) / sl_["qty"] > 0.05:
+            log(f"reconcile: {sym} qty {sl_['qty']:.6g} -> {bal:.6g} (chain)")
+            sl_["qty"] = bal
+    # sweep for untracked holdings into free slots (boot-only, ~20 RPC reads)
+    held = {sl_["sym"] for sl_ in st["slots"]}
     for sym in universe():
+        if len(st["slots"]) >= SLOTS:
+            break
+        if sym in held:
+            continue
         try:
             bal = ex.bal(sym)
         except Exception:  # noqa: BLE001
@@ -665,13 +700,15 @@ def reconcile(st: dict, ex, paper: bool) -> None:
             continue
         px = spot_px(sym)
         if px and bal * px > 2:
-            st["pos"] = {"sym": sym, "qty": bal, "cost": bal * px, "eff": px, "ts": time.time()}
-            st["peak"] = None; st["px_peak"] = None
+            st["slots"].append({"sym": sym, "qty": bal, "cost": bal * px, "eff": px,
+                                "ts": time.time(), "wild": False, "peak": None,
+                                "px_peak": None, "last_alert": 0})
+            held.add(sym)
             log(f"reconcile: adopted untracked {bal:.6g} {sym} (~${bal*px:.2f}) @ eff=now — managing it")
             notify("Gridora Autopilot", f"Adopsi posisi tak terlacak: {sym} ~${bal*px:.2f}")
             ledger({"event": "buy", "sym": sym, "qty": bal, "cost": bal * px, "eff": px,
                     "reason": "reconcile-adopt (untracked on-chain holding)"})
-            return
+    sync_mirror(st)
 
 
 def selfcheck() -> None:
@@ -697,8 +734,13 @@ def selfcheck() -> None:
     assert dip_score(2.0, 36.0, 0.30, 5.0, 5e6) is not None         # volatile = scalp candidate
     assert wild_range([18.45, 16.9, 15.2], [5.58, 8.3, 13.6]) > WILD7D  # LAB week = WILD profile
     assert wild_range([10.5, 10.2], [9.8, 9.6]) < 10                    # calm week = calm profile
-    # profile TP maths on a $30 stack
-    assert abs(SCALP_TP_PCT * 30 - 0.36) < 1e-9 and abs(CALM_TP_PCT * 30 - 0.60) < 1e-9
+    # profile TP maths on a $15 slot (2-slot split of $30)
+    assert abs(SCALP_TP_PCT * 15 - 0.27) < 1e-9 and abs(CALM_TP_PCT * 15 - 0.42) < 1e-9
+    # slot-state migration: legacy single-pos states must load as one slot
+    _st = {"pos": {"sym": "LAB", "qty": 1.0, "cost": 30.0, "eff": 30.0, "ts": 0}, "peak": -1.0}
+    if "slots" not in _st:
+        _st["slots"] = [{**_st["pos"], "peak": _st.get("peak"), "px_peak": None, "last_alert": 0}]
+    assert _st["slots"][0]["sym"] == "LAB" and _st["slots"][0]["peak"] == -1.0
     # brain verdict parsing (fenced, plain, garbage)
     assert parse_verdict('```json\n{"enter": false, "confidence": 88, "reason": "dead cat"}\n```') == \
         {"enter": False, "confidence": 88, "reason": "dead cat"}
@@ -728,21 +770,26 @@ def main() -> None:
     ex = Paper(st) if paper else Live()
     reconcile(st, ex, paper)
     mode_lbl = "PAPER" if paper else "LIVE"
-    what = "holding " + st["pos"]["sym"] if st["pos"] else f"flat, USDT ${ex.usdt():.2f}"
-    log(f"=== AUTOPILOT {mode_lbl} | universe {len(universe())} tokens | {what} ===")
+    what = ("holding " + "+".join(s["sym"] for s in st["slots"])) if st["slots"] \
+        else f"flat, USDT ${ex.usdt():.2f}"
+    log(f"=== AUTOPILOT {mode_lbl} | universe {len(universe())} tokens | "
+        f"slots {len(st['slots'])}/{SLOTS} | {what} ===")
     notify("Gridora Autopilot", f"{mode_lbl} aktif — {what}")  # boot = Mac tahu kabar bot
+    last_scan = 0.0
     while True:
         try:
-            if st["pos"]:
-                manage_tick(st, ex)
-            else:
+            for i in reversed(range(len(st["slots"]))):   # reversed: close() pops safely
+                manage_tick(st, ex, i)
+            if len(st["slots"]) < SLOTS and time.time() - last_scan >= SCAN_POLL:
                 scan_tick(st, ex)
+                last_scan = time.time()
+            sync_mirror(st)
             save_state(st)
         except Exception as e:  # noqa: BLE001 — the loop must survive anything transient
             log(f"!! tick error: {str(e)[:140]}")
         if once:
             break
-        time.sleep(HOLD_POLL if st["pos"] else SCAN_POLL)
+        time.sleep(HOLD_POLL if st["slots"] else SCAN_POLL)
 
 
 if __name__ == "__main__":

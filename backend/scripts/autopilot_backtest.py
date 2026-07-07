@@ -572,3 +572,126 @@ def prime_study() -> None:
 
 if "--prime" in sys.argv:
     prime_study()
+
+
+def slots_sim(data, stats, wilds, btc, ticks, idx,
+              n_slots, scalp_tp, calm_tp, pos_max, wild_thr) -> dict:
+    """Multi-slot portfolio: N independent positions, distinct tokens, shared USDT pool.
+    Same never-red/TP/trail per slot as scalp_sim."""
+    usdt = START_USD
+    slots = []      # list of dicts: sym qty cost peak wild t0
+    cooldown, pending = {}, None
+    trades, holds, eq = [], [], START_USD
+    eq_peak, max_dd = START_USD, 0.0
+    for t in ticks:
+        ok_btc = btc.get(t, (True, 0.0))[0]
+        for sl in list(slots):
+            j = idx[sl["sym"]].get(t)
+            if j is None:
+                continue
+            px = data[sl["sym"]][j][1]
+            n = ap.net_of(sl["qty"], px, sl["cost"])
+            sl["peak"] = max(sl["peak"], n)
+            tp = (scalp_tp if sl["wild"] else calm_tp) * sl["cost"]
+            sell = None
+            if n >= tp:
+                sell = "tp"
+            elif sl["peak"] >= ap.ARM:
+                gap = sl["cost"] * (ap.SCALP_GAP_PCT if sl["wild"] else (ap.RIDE_GAP_PCT if ok_btc else ap.LOCK_GAP_PCT))
+                if ap.should_lock(n, ap.ratchet_floor(sl["peak"], gap)):
+                    sell = "lock"
+            if sell:
+                usdt += sl["qty"] * px * (1 - ap.SELL_FRIC) - ap.GAS_USD
+                trades.append(n); holds.append((t - sl["t0"]) / 3600)
+                cooldown[sl["sym"]] = t + ap.COOLDOWN_MIN * 60
+                slots.remove(sl)
+        if len(slots) < n_slots and ok_btc:
+            held = {sl["sym"] for sl in slots}
+            best = None
+            for sym, st in stats.items():
+                j = idx[sym].get(t)
+                s = st[j] if j is not None else None
+                if not s or sym in held or t < cooldown.get(sym, 0):
+                    continue
+                sc = ap.dip_score(s["chg24"], s["rng"], s["pos"], s["room"], s["vol"])
+                if sc is None or s["pos"] > pos_max or not (s["base"] and s["up"]):
+                    continue
+                if sym in ap.PRIME:
+                    sc += ap.PRIME_BONUS
+                if best is None or sc > best[0]:
+                    best = (sc, sym, s, wilds[sym][j] > wild_thr)
+            if best:
+                _, sym, s, wl = best
+                if pending and pending[0] == sym:
+                    free = n_slots - len(slots)
+                    amt = (usdt - float(ap.RESERVE)) / free
+                    if amt >= 5:
+                        qty = amt * (1 - ap.SELL_FRIC) / s["px"]
+                        usdt -= amt
+                        slots.append({"sym": sym, "qty": qty, "cost": amt, "peak": -9e9,
+                                      "wild": wl, "t0": t})
+                    pending = None
+                else:
+                    pending = (sym, t)
+            else:
+                pending = None
+        eq = usdt
+        for sl in slots:
+            j = idx[sl["sym"]].get(t)
+            eq += sl["qty"] * data[sl["sym"]][j][1] * (1 - ap.SELL_FRIC) if j is not None else sl["cost"]
+        eq_peak = max(eq_peak, eq)
+        max_dd = max(max_dd, (eq_peak - eq) / eq_peak)
+    open_mtm = sum(ap.net_of(sl["qty"], data[sl["sym"]][-1][1], sl["cost"]) for sl in slots)
+    open_cost = sum(sl["cost"] for sl in slots)
+    wins = [x for x in trades if x > 0]
+    days = max(1, (ticks[-1] - ticks[0]) / 86400) if ticks else 1
+    return {"pnl": usdt + open_cost + open_mtm - START_USD,
+            "closed": len(trades), "win": len(wins) / len(trades) * 100 if trades else 0,
+            "tpd": len(trades) / days, "dd": max_dd * 100,
+            "open": ",".join(f"{sl['sym']}{ap.net_of(sl['qty'], data[sl['sym']][-1][1], sl['cost']):+.1f}" for sl in slots) or "-"}
+
+
+def slots_study() -> None:
+    days = int(sys.argv[sys.argv.index("--days") + 1]) if "--days" in sys.argv else 30
+    syms = ap.universe()
+    btc_cs = candles_5m("BTC_USDT", days)
+    data = {}
+    for s in syms:
+        cs = candles_5m(ap.GATE_PAIR.get(s, s) + "_USDT", days)
+        if len(cs) > WARM + 100:
+            data[s] = cs
+    stats = {s: precompute(cs) for s, cs in data.items()}
+    wilds = {s: daily_windows(cs) for s, cs in data.items()}
+    idx = {s: {c[0]: i for i, c in enumerate(cs)} for s, cs in data.items()}
+    bidx = {c[0]: i for i, c in enumerate(btc_cs)}
+    btc = {}
+    for t, i in bidx.items():
+        if i >= WARM:
+            c1h = (btc_cs[i][1] / btc_cs[i - 12][1] - 1) * 100
+            c24 = (btc_cs[i][1] / btc_cs[i - WARM][1] - 1) * 100
+            btc[t] = (c1h >= ap.BTC_1H_MIN and c24 >= ap.BTC_24H_MIN, c1h)
+    all_ts = set()
+    for s in idx:
+        all_ts.update(idx[s].keys())
+    full = sorted(all_ts & set(btc))
+    windows = {"30d": full,
+               "14d": [t for t in full if t >= full[-1] - 14 * 86400],
+               "7d": [t for t in full if t >= full[-1] - 7 * 86400]}
+    print(f"{'slots':>5} {'stp':>6} {'ctp':>6} | 30d / 14d / 7d : pnl clsd win tpd dd [open]")
+    rows = []
+    for ns in (1, 2, 3):
+        for stp, ctp in ((0.012, 0.020), (0.018, 0.028), (0.025, 0.035)):
+            rs = {w: slots_sim(data, stats, wilds, btc, tk, idx, ns, stp, ctp, 0.45, 60.0)
+                  for w, tk in windows.items()}
+            worst = min(r["pnl"] for r in rs.values())
+            rows.append(((ns, stp, ctp), rs, worst))
+            line = " | ".join(f"{r['pnl']:+6.2f} {r['closed']:>3} {r['win']:>3.0f} {r['tpd']:.1f} {r['dd']:>4.1f} [{r['open'][:20]}]"
+                              for r in rs.values())
+            print(f"{ns:>5} {stp:>6} {ctp:>6} | {line}", flush=True)
+    rows.sort(key=lambda x: -x[2])
+    ns, stp, ctp = rows[0][0]
+    print(f"\nMAXIMIN WINNER: slots={ns} scalp_tp={stp} calm_tp={ctp} (worst-window {rows[0][2]:+.2f}$)")
+
+
+if "--slots" in sys.argv:
+    slots_study()
