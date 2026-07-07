@@ -48,6 +48,12 @@ RANGE_MAX = 40.0         # % — only absolute insanity is prefilter-rejected; w
                          # "jangan blacklist token volatile — justru kesempatan scalping")
 WILD7D = 60.0            # % 7d high/low swing — above this a candidate is WILD: scalp
                          # profile (fast TP, tight trail) + a stricter brain review
+WILD7D_CAP = 120.0       # % — ABOVE THIS = casino regime, HARD block (brain not even
+                         # consulted). LAB's week was 230% and it fell another −55% after
+                         # entry (2026-07-07, −$16.66 realized). One LLM call must never be
+                         # the only thing between the stack and a token like that.
+CRASH_ALERT_PCT = 0.15   # notify IMMEDIATELY if a held slot bleeds ≥15% of cost — don't
+                         # wait for the 24h stuck alert while a token free-falls
 POS_MAX = 0.45           # buy only in the lower 45% of the 24h range (a real discount)
 ROOM_MIN = 3.5           # % to the 24h high — need profit room before the wall
 TAKER_MIN = 54.0         # % buy-side of last 200 trades — buyers actually back
@@ -84,10 +90,11 @@ LEDGER_F = os.path.join(STATE_DIR, "trades.jsonl")
 
 STABLES = {"USDT", "USDC", "FDUSD", "DAI", "WBNB", "BNB"}
 # AXS/ZRO: execution-impossible (TWAK can't route their thin BSC pools). SLX: EMPIRICAL
-# serial collapser — poisoned every 2026-07-07 backtest window it entered (open bag −$17
-# to −$18 in 4 independent studies; removing ONLY SLX flipped 30d from −$18.47 to +$2.35).
-# Volatile-but-honest tokens (LAB/TOSHI/RAVE) stay in — WILD profile + brain handle them.
-THIN_TRAPS = {"AXS", "ZRO", "SLX"}
+# serial collapser (poisoned all 4 backtest studies). LAB: EMPIRICAL — burned this wallet
+# FIVE times (−$1.29, −$0.76, scratch churn ×2, and −$16.66 realized 2026-07-07 when it
+# fell −55% in a day); a low-float casino whose dips do not mean-revert. Volatile-but-
+# honest tokens (TOSHI/RAVE) stay in — WILD profile + brain + WILD7D_CAP handle them.
+THIN_TRAPS = {"AXS", "ZRO", "SLX", "LAB"}
 # PRIME tier — deep-liquidity mean-reverting majors. The 2026-07-07 field study of all
 # 123 competition wallets showed the healthiest active traders rotate DAILY through a
 # small set of liquid majors and park back in stables, while the token-spray and P&D
@@ -547,7 +554,10 @@ def scan_tick(st: dict, ex) -> None:
         d = deep(sym)
         if not (d and d["base"] and d["up"] and d["taker"] >= TAKER_MIN):
             continue
-        # wild ≠ rejected: it selects the SCALP profile + a stricter brain review
+        if d["wild7d"] > WILD7D_CAP:
+            log(f"CASINO {sym} — 7d swing {d['wild7d']:.0f}% > {WILD7D_CAP:.0f}% = hard block")
+            continue
+        # wild (60–120%) ≠ rejected: it selects the SCALP profile + a stricter brain review
         w = hl_whale(sym, st)
         if w and w["imb"] < HL_VETO_IMB:
             log(f"VETO {sym} — {hl_str(w)} = active sell wall on the perp book, skip this round")
@@ -658,7 +668,12 @@ def manage_tick(st: dict, ex, i: int) -> None:
             close("trail-lock"); return
 
     age_h = (time.time() - sl_["ts"]) / 3600
-    if n < 0 and age_h >= STUCK_H and time.time() - sl_.get("last_alert", 0) >= REALERT_H * 3600:
+    if n <= -CRASH_ALERT_PCT * cost and time.time() - sl_.get("last_alert", 0) >= 3600:
+        sl_["last_alert"] = time.time()
+        msg = f"{sym} CRASH {n/cost*100:+.0f}% (${n:+.2f}, px ${px:.6g}) — free-falling, keputusan cepat?"
+        notify("Gridora Autopilot — CRASH", msg)
+        log(f"🚨 CRASH ALERT: {msg} | HOLDING (never-red; keputusan di user)")
+    elif n < 0 and age_h >= STUCK_H and time.time() - sl_.get("last_alert", 0) >= REALERT_H * 3600:
         sl_["last_alert"] = time.time()
         msg = f"{sym} merah ${n:+.2f} sudah {age_h:.0f}h (px ${px:.6g}, taker {taker:.0f}%) — cut atau hold?"
         notify("Gridora Autopilot — STUCK", msg)
@@ -732,8 +747,9 @@ def selfcheck() -> None:
     # scalp-mode guards: only absolute insanity is prefilter-rejected; wild = profile switch
     assert dip_score(2.0, 45.0, 0.30, 5.0, 5e6) is None             # >40% day range = insanity
     assert dip_score(2.0, 36.0, 0.30, 5.0, 5e6) is not None         # volatile = scalp candidate
-    assert wild_range([18.45, 16.9, 15.2], [5.58, 8.3, 13.6]) > WILD7D  # LAB week = WILD profile
-    assert wild_range([10.5, 10.2], [9.8, 9.6]) < 10                    # calm week = calm profile
+    assert wild_range([18.45, 16.9, 15.2], [5.58, 8.3, 13.6]) > WILD7D_CAP  # LAB week 230% = HARD block
+    assert WILD7D < 100 < WILD7D_CAP                                        # wild band sits below the cap
+    assert wild_range([10.5, 10.2], [9.8, 9.6]) < 10                        # calm week = calm profile
     # profile TP maths on a $15 slot (2-slot split of $30)
     assert abs(SCALP_TP_PCT * 15 - 0.27) < 1e-9 and abs(CALM_TP_PCT * 15 - 0.42) < 1e-9
     # slot-state migration: legacy single-pos states must load as one slot
