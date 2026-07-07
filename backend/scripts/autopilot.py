@@ -43,10 +43,11 @@ VOL_MIN = 1_000_000      # $ Gate 24h quote volume (dead books have useless take
 CHG24_MAX = 9.0          # % — above = parabolic top, never buy (MOM_24H_MAX lesson)
 CHG24_MIN = -20.0        # % — below = collapsing, not a dip
 RANGE_MIN = 4.5          # % 24h high/low — tighter ranges can't clear the ~3% round-trip
-RANGE_MAX = 18.0         # % — wider = post-crash chaos, not a dip venue (LAB post-mortem
-                         # 2026-07-07: rng 36% AND the old score REWARDED it via room ×2)
-WILD7D_MAX = 60.0        # % 7d high/low swing — above = collapsed parabola / dead-cat regime
-                         # (LAB's week was 230%: $18.45 high, $5.58 low). Structural guard.
+RANGE_MAX = 40.0         # % — only absolute insanity is prefilter-rejected; wild tokens
+                         # go to the SCALP profile + the brain decides (user 2026-07-07:
+                         # "jangan blacklist token volatile — justru kesempatan scalping")
+WILD7D = 60.0            # % 7d high/low swing — above this a candidate is WILD: scalp
+                         # profile (fast TP, tight trail) + a stricter brain review
 POS_MAX = 0.45           # buy only in the lower 45% of the 24h range (a real discount)
 ROOM_MIN = 3.5           # % to the 24h high — need profit room before the wall
 TAKER_MIN = 54.0         # % buy-side of last 200 trades — buyers actually back
@@ -59,9 +60,11 @@ ARM = 0.02               # $ net — ratchet arms the moment we're past break-ev
 FLOOR_MIN = 0.02         # $ net — the floor never sits below break-even
 RIDE_GAP_PCT = 0.015     # trail gap as fraction of cost while BTC is strong (rides runners)
 LOCK_GAP_PCT = 0.007     # tighter gap when BTC turns weak (lock fast)
-CAP_PCT = 0.06           # bank a spike at +6% — backtest-derived (2026-07-07, 30d+14d
-                         # windows: 0.06 = only consistently-positive CAP w/ lowest DD;
-                         # 0.12 missed the SLX spike then rode it -70%. See autopilot_backtest)
+CAP_PCT = 0.06           # kept for autopilot_backtest compatibility; live exits now use the
+                         # profile TPs below (scalp mode 2026-07-07: bank fast, compound daily)
+CALM_TP_PCT = 0.020      # calm tokens: bank at net +2.0% of cost (~gross +4%) — fast compounding
+SCALP_TP_PCT = 0.012     # wild tokens: bank at net +1.2% (~gross +3%) — in, profit, OUT
+SCALP_GAP_PCT = 0.005    # wild trail gap — a green wild position never gives back >0.5%
 FAST_NET_PCT = 0.03      # fast-reversal only once net >= 3% of cost
 FAST_5M = -1.5           # % 5m candle drop that confirms a real reversal
 FAST_TAKER = 30.0        # taker collapse + price off peak also confirms
@@ -76,11 +79,10 @@ STATE_F = os.path.join(STATE_DIR, "autopilot.json")
 LEDGER_F = os.path.join(STATE_DIR, "trades.jsonl")
 
 STABLES = {"USDT", "USDC", "FDUSD", "DAI", "WBNB", "BNB"}
-# AXS/ZRO: untradeable via TWAK (BSC liq $32-49k, price lags CEX). LAB: thin low-float
-# chaos, burned us 4x (−$1.29, −$0.76, −$4+ 2026-07-07 post-mortem). TOSHI: BSC pool
-# diverges from Gate on spikes (scratch-or-loss lottery). RAVE: thin parabolic, BSC price
-# once detached 42% from Gate. SLX: repeat catastrophic collapser in every backtest window.
-THIN_TRAPS = {"AXS", "ZRO", "LAB", "TOSHI", "RAVE", "SLX"}
+# EXECUTION-impossible only (TWAK can't route their thin BSC pools; the price you see is
+# not the price you get). Volatile-but-executable tokens (LAB/TOSHI/RAVE/SLX) are NOT
+# blacklisted — they're scalp opportunities handled by the WILD profile + the brain.
+THIN_TRAPS = {"AXS", "ZRO"}
 GATE_PAIR = {"BTCB": "BTC"}   # Gate ticker symbol overrides
 UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 
@@ -337,14 +339,17 @@ def parse_verdict(text: str) -> dict | None:
 
 def brain_verdict(sym: str, brief: dict) -> dict | None:
     prompt = (
-        "You are the final risk officer for a small live spot-trading bot on BNB Chain "
-        "(~$30 all-in per trade, dip-buy only, NEVER sells at a loss — a bad entry traps "
-        "the whole stack for days). Mechanical filters already passed this candidate. "
-        "Your ONLY job is to veto entries with character problems the filters miss: "
-        "collapsed parabolas, dead-cat bounces, thin/low-float or manipulated chaos, "
-        "post-pump distribution, macro risk-off, anything a seasoned trader walks away "
-        "from. Study daily_closes_10d for the multi-day story. Be strict — a missed win "
-        "costs little, a trapped position costs days. DATA:\n"
+        "You are the final risk officer for a small live SCALPING bot on BNB Chain "
+        "(~$30 all-in per trade; it banks small profits fast — net +1.2% on WILD tokens, "
+        "+2% on calm ones — but NEVER sells at a loss, so a bad entry traps the whole "
+        "stack for days). Mechanical filters already passed this candidate. Your ONLY "
+        "job is to veto entries whose character the filters miss. For profile=WILD-scalp "
+        "(7d swing > 60%): volatility itself is the OPPORTUNITY — approve only when the "
+        "multi-day story shows fresh upward alpha (basing after a flush, strong taker "
+        "flow, whale bids); veto fading dead-cat bounces, post-pump distribution, and "
+        "manipulated chop. For calm profiles veto collapsed parabolas and macro risk-off. "
+        "Study daily_closes_10d for the story. A missed win costs little; a trapped "
+        "position costs days. DATA:\n"
         + json.dumps(brief)
         + '\nReply with STRICT JSON only: {"enter": true|false, "confidence": 0-100, '
         '"reason": "<max 140 chars>"}'
@@ -393,7 +398,6 @@ class Live:
 
     def bnb_ok(self) -> bool:
         from gridora.config import settings
-        data = "0x"  # native balance via eth_getBalance
         import httpx
         r = httpx.post(settings.bsc_rpc_url, json={"jsonrpc": "2.0", "method": "eth_getBalance",
                        "params": [self.wallet, "latest"], "id": 1}, timeout=15)
@@ -509,10 +513,7 @@ def scan_tick(st: dict, ex) -> None:
         d = deep(sym)
         if not (d and d["base"] and d["up"] and d["taker"] >= TAKER_MIN):
             continue
-        if d["wild7d"] > WILD7D_MAX:
-            log(f"WILD {sym} — 7d swing {d['wild7d']:.0f}% > {WILD7D_MAX:.0f}% = "
-                "collapsed-parabola regime, not a dip — skip")
-            continue
+        # wild ≠ rejected: it selects the SCALP profile + a stricter brain review
         w = hl_whale(sym, st)
         if w and w["imb"] < HL_VETO_IMB:
             log(f"VETO {sym} — {hl_str(w)} = active sell wall on the perp book, skip this round")
@@ -535,8 +536,10 @@ def scan_tick(st: dict, ex) -> None:
         return
 
     st["pending"] = None
+    wild = d["wild7d"] > WILD7D
     # THE BRAIN GATE (wajib): Opus reviews the full brief; no verdict = no entry.
-    brief = {"candidate": sym, "price_usd": r["px"], "pos_in_24h_range": round(r["pos"], 3),
+    brief = {"candidate": sym, "profile": "WILD-scalp" if wild else "calm",
+             "price_usd": r["px"], "pos_in_24h_range": round(r["pos"], 3),
              "range_24h_pct": round(r["rng"], 1), "room_to_24h_high_pct": round(r["room"], 1),
              "chg_24h_pct": round(r["chg24"], 1), "taker_buy_pct": round(d["taker"], 0),
              "chg_5m_pct": round(d["m5"], 2), "wild7d_swing_pct": round(d["wild7d"], 0),
@@ -560,9 +563,9 @@ def scan_tick(st: dict, ex) -> None:
     if not fill:
         return
     qty, cost, eff = fill
-    st["pos"] = {"sym": sym, "qty": qty, "cost": cost, "eff": eff, "ts": now}
+    st["pos"] = {"sym": sym, "qty": qty, "cost": cost, "eff": eff, "ts": now, "wild": wild}
     st["peak"] = None; st["px_peak"] = None; st["last_alert"] = 0
-    ledger({"event": "buy", "sym": sym, "qty": qty, "cost": cost, "eff": eff,
+    ledger({"event": "buy", "sym": sym, "qty": qty, "cost": cost, "eff": eff, "wild": wild,
             "taker": d["taker"], "pos": r["pos"], "wild7d": d["wild7d"],
             "hl_imb": w["imb"] if w else None,
             "hl_oi_chg": w.get("oi_chg") if w else None,
@@ -574,7 +577,7 @@ def scan_tick(st: dict, ex) -> None:
 
 def manage_tick(st: dict, ex) -> None:
     pos = st["pos"]
-    sym, qty, cost, eff = pos["sym"], pos["qty"], pos["cost"], pos["eff"]
+    sym, qty, cost = pos["sym"], pos["qty"], pos["cost"]
     d = deep(sym)
     px = spot_px(sym)
     if px is None:
@@ -582,7 +585,7 @@ def manage_tick(st: dict, ex) -> None:
     n = net_of(qty, px, cost)
     st["peak"] = n if st["peak"] is None else max(st["peak"], n)
     st["px_peak"] = px if st["px_peak"] is None else max(st["px_peak"], px)
-    peak, px_peak = st["peak"], st["px_peak"]
+    peak = st["peak"]
     m5, taker = (d["m5"], d["taker"]) if d else (0.0, 50.0)
     btc_ok, btc = btc_gate()
 
@@ -599,13 +602,15 @@ def manage_tick(st: dict, ex) -> None:
         notify("Gridora Autopilot", f"SELL {sym} net ${pnl:+.2f} ({bps:+d}bps) — {reason}")
         log(f"💰 SOLD {sym} -> ${proceeds:.2f} | net ${pnl:+.2f} ({bps:+d}bps) | {reason}")
 
-    if px >= eff * (1 + CAP_PCT):
-        log(f"TRIGGER=CAP {sym} ${px:.6g} (+{CAP_PCT*100:.0f}%) net ${n:+.2f}"); close("cap-bank"); return
-    if n >= FAST_NET_PCT * cost and (m5 <= FAST_5M or (taker <= FAST_TAKER and px <= px_peak * FAST_PX_OFF)):
-        log(f"TRIGGER=FAST-REVERSAL {sym} ${px:.6g} net +${n:.2f} 5m {m5:+.1f}% taker {taker:.0f}%")
-        close("fast-reversal"); return
+    # SCALP EXITS (2026-07-07): bank fast, compound daily. Profile TP replaces the old
+    # CAP/fast-reversal riders (both sat above the TP = dead code in scalp mode).
+    wild = bool(pos.get("wild"))
+    tp = (SCALP_TP_PCT if wild else CALM_TP_PCT) * cost
+    if n >= tp:
+        log(f"TRIGGER=TP {sym} ${px:.6g} net +${n:.2f} >= +${tp:.2f} ({'wild scalp' if wild else 'calm'}) — BANK")
+        close("scalp-tp" if wild else "calm-tp"); return
     if peak >= ARM:
-        gap = cost * (RIDE_GAP_PCT if btc_ok else LOCK_GAP_PCT)
+        gap = cost * (SCALP_GAP_PCT if wild else (RIDE_GAP_PCT if btc_ok else LOCK_GAP_PCT))
         floor = ratchet_floor(peak, gap)
         if should_lock(n, floor):
             log(f"TRIGGER=LOCK {sym} ${px:.6g} net +${n:.2f} (floor +${floor:.2f} peak +${peak:.2f})")
@@ -676,11 +681,13 @@ def selfcheck() -> None:
     # knife vs base
     assert base_formed([10, 9.5, 9, 8.5, 8, 8, 8, 8, 8.1, 8.05, 8.2, 8.1])       # floor held = base
     assert not base_formed([10, 9.5, 9, 8.5, 8, 7.8, 7.6, 7.4, 7.2, 7.0, 6.8, 6.6])  # falling knife
-    # post-mortem guards: chaos range cap + collapsed-parabola detector
-    assert dip_score(2.0, 36.0, 0.30, 5.0, 5e6) is None             # LAB's rng 36% = rejected now
-    assert dip_score(2.0, 12.0, 0.30, 5.0, 5e6) is not None         # healthy volatility still passes
-    assert wild_range([18.45, 16.9, 15.2], [5.58, 8.3, 13.6]) > 200  # LAB's week = 230% = wild
-    assert wild_range([10.5, 10.2], [9.8, 9.6]) < 10                 # calm week passes
+    # scalp-mode guards: only absolute insanity is prefilter-rejected; wild = profile switch
+    assert dip_score(2.0, 45.0, 0.30, 5.0, 5e6) is None             # >40% day range = insanity
+    assert dip_score(2.0, 36.0, 0.30, 5.0, 5e6) is not None         # volatile = scalp candidate
+    assert wild_range([18.45, 16.9, 15.2], [5.58, 8.3, 13.6]) > WILD7D  # LAB week = WILD profile
+    assert wild_range([10.5, 10.2], [9.8, 9.6]) < 10                    # calm week = calm profile
+    # profile TP maths on a $30 stack
+    assert abs(SCALP_TP_PCT * 30 - 0.36) < 1e-9 and abs(CALM_TP_PCT * 30 - 0.60) < 1e-9
     # brain verdict parsing (fenced, plain, garbage)
     assert parse_verdict('```json\n{"enter": false, "confidence": 88, "reason": "dead cat"}\n```') == \
         {"enter": False, "confidence": 88, "reason": "dead cat"}
