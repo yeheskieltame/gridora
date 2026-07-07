@@ -226,16 +226,23 @@ class Live:
         from gridora.config import settings
         from scripts.live_active import Trader
         settings.guard(); settings.assert_twak_creds()
-        wallet = settings.agent_address or asyncio.run(TwakClient(chain_key=settings.chain_key).address())
+        # ONE persistent loop for every call — the REST transport caches an httpx client
+        # bound to its first loop; asyncio.run-per-call would close it ("Event loop is closed").
+        self.loop = asyncio.new_event_loop()
+        wallet = settings.agent_address or self.loop.run_until_complete(
+            TwakClient(chain_key=settings.chain_key).address())
         self.tr = Trader(TwakClient(chain_key=settings.chain_key), settings.chain_key,
                          wallet, settings.bsc_rpc_url, universe())
         self.wallet = wallet
 
+    def _run(self, coro):
+        return self.loop.run_until_complete(coro)
+
     def usdt(self) -> float:
-        return float(asyncio.run(self.tr.bal("USDT")))
+        return float(self._run(self.tr.bal("USDT")))
 
     def bal(self, sym: str) -> float:
-        return float(asyncio.run(self.tr.bal(sym)))
+        return float(self._run(self.tr.bal(sym)))
 
     def bnb_ok(self) -> bool:
         from gridora.config import settings
@@ -247,7 +254,7 @@ class Live:
 
     def quote_ok(self, sym: str, gate_px: float) -> bool:
         """The landmine + divergence guard: TWAK's implied price must track Gate."""
-        implied = float(asyncio.run(self.tr.price(sym)))
+        implied = float(self._run(self.tr.price(sym)))
         if implied <= 0:
             return False
         dev = abs(implied / gate_px - 1)
@@ -257,25 +264,43 @@ class Live:
         return True
 
     def buy(self, sym: str) -> tuple[float, float, float] | None:
-        amt = Decimal(str(self.usdt())) - RESERVE
+        before = self.usdt()
+        amt = Decimal(str(before)) - RESERVE
         if amt < 5:
-            log(f"!! only ${float(amt)+float(RESERVE):.2f} USDT — cannot enter"); return None
-        got = float(asyncio.run(self.tr.swap("USDT", sym, amt)))
+            log(f"!! only ${before:.2f} USDT — cannot enter"); return None
+        got = 0.0
+        try:
+            got = float(self._run(self.tr.swap("USDT", sym, amt)))
+        except Exception as e:  # noqa: BLE001
+            log(f"!! swap raised: {str(e)[:110]}")
         if got <= 0:
+            # a swap can LAND on-chain while the client errors (seen live 2026-07-07:
+            # LAB filled, response lost) — chain is truth, check before declaring failure
+            tok = self.bal(sym)
+            spent = before - self.usdt()
+            if tok > 0 and spent > 2:
+                log(f"!! swap reported failure but {tok:.6g} {sym} landed on-chain (${spent:.2f} spent) — adopting fill")
+                return tok, spent, spent / tok
             log("!! BUY FAILED"); return None
         return got, float(amt), float(amt) / got
 
     def sell(self, sym: str, cost: float, reason: str) -> float | None:
-        bal = asyncio.run(self.tr.bal(sym))
+        bal = self._run(self.tr.bal(sym))
         if bal <= 0:
             return None
-        u0 = asyncio.run(self.tr.bal("USDT"))
-        got = float(asyncio.run(self.tr.swap(sym, "USDT", bal)))
+        u0 = self._run(self.tr.bal("USDT"))
+        got = 0.0
+        try:
+            got = float(self._run(self.tr.swap(sym, "USDT", bal)))
+        except Exception as e:  # noqa: BLE001
+            log(f"!! sell swap raised: {str(e)[:110]}")
+        if got <= 0 and self.bal(sym) <= float(bal) * 0.01:
+            got = 1.0  # tokens are gone on-chain -> the sell actually landed; fall through
         if got <= 0:
             log(f"!! SELL FAILED ({reason}) — still holding"); return None
-        proceeds = float(asyncio.run(self.tr.bal("USDT"))) - float(u0)
+        proceeds = float(self._run(self.tr.bal("USDT"))) - float(u0)
         bps = int((proceeds - cost) / cost * 10000)
-        asyncio.run(self.tr.journal(bps, f"{sym}-auto"))
+        self._run(self.tr.journal(bps, f"{sym}-auto"))
         return proceeds
 
 
@@ -422,17 +447,37 @@ def manage_tick(st: dict, ex) -> None:
 
 
 def reconcile(st: dict, ex, paper: bool) -> None:
-    """Chain is truth (live): a position sold/changed outside the bot must not ghost on."""
-    if paper or not st["pos"]:
+    """Chain is truth (live): a position sold/changed outside the bot must not ghost on,
+    and a landed swap whose response was lost must not leave holdings unmanaged."""
+    if paper:
         return
-    sym = st["pos"]["sym"]
-    bal = ex.bal(sym)
-    if bal * st["pos"]["eff"] < 2:
-        log(f"reconcile: state had {sym} but chain shows none — clearing to FLAT")
-        st["pos"] = None; st["peak"] = None; st["px_peak"] = None
-    elif abs(bal - st["pos"]["qty"]) / st["pos"]["qty"] > 0.05:
-        log(f"reconcile: {sym} qty {st['pos']['qty']:.6g} -> {bal:.6g} (chain)")
-        st["pos"]["qty"] = bal
+    if st["pos"]:
+        sym = st["pos"]["sym"]
+        bal = ex.bal(sym)
+        if bal * st["pos"]["eff"] < 2:
+            log(f"reconcile: state had {sym} but chain shows none — clearing to FLAT")
+            st["pos"] = None; st["peak"] = None; st["px_peak"] = None
+        elif abs(bal - st["pos"]["qty"]) / st["pos"]["qty"] > 0.05:
+            log(f"reconcile: {sym} qty {st['pos']['qty']:.6g} -> {bal:.6g} (chain)")
+            st["pos"]["qty"] = bal
+        return
+    # flat per state — sweep the universe for untracked holdings (boot-only, ~20 RPC reads)
+    for sym in universe():
+        try:
+            bal = ex.bal(sym)
+        except Exception:  # noqa: BLE001
+            continue
+        if bal <= 0:
+            continue
+        px = spot_px(sym)
+        if px and bal * px > 2:
+            st["pos"] = {"sym": sym, "qty": bal, "cost": bal * px, "eff": px, "ts": time.time()}
+            st["peak"] = None; st["px_peak"] = None
+            log(f"reconcile: adopted untracked {bal:.6g} {sym} (~${bal*px:.2f}) @ eff=now — managing it")
+            notify("Gridora Autopilot", f"Adopsi posisi tak terlacak: {sym} ~${bal*px:.2f}")
+            ledger({"event": "buy", "sym": sym, "qty": bal, "cost": bal * px, "eff": px,
+                    "reason": "reconcile-adopt (untracked on-chain holding)"})
+            return
 
 
 def selfcheck() -> None:
@@ -468,9 +513,10 @@ def main() -> None:
         st.pop("paper", None)   # stale paper wallet would mislabel the console badge
     ex = Paper(st) if paper else Live()
     reconcile(st, ex, paper)
-    mode = "PAPER" if paper else "LIVE"
-    log(f"=== AUTOPILOT {mode} | universe {len(universe())} tokens | "
-        f"{'holding ' + st['pos']['sym'] if st['pos'] else f'flat, USDT ${ex.usdt():.2f}'} ===")
+    mode_lbl = "PAPER" if paper else "LIVE"
+    what = "holding " + st["pos"]["sym"] if st["pos"] else f"flat, USDT ${ex.usdt():.2f}"
+    log(f"=== AUTOPILOT {mode_lbl} | universe {len(universe())} tokens | {what} ===")
+    notify("Gridora Autopilot", f"{mode_lbl} aktif — {what}")  # boot = Mac tahu kabar bot
     while True:
         try:
             if st["pos"]:
