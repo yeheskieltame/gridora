@@ -21,9 +21,10 @@ const config: Config = {
         accent: "rgb(var(--accent) / <alpha-value>)",  // BNB gold brand accent
         pos: "rgb(var(--pos) / <alpha-value>)",        // profit
         neg: "rgb(var(--neg) / <alpha-value>)",        // loss
-        // Landing page fixed palette (theme-independent — the landing is always light).
+        // Brand palette (single theme: porcelain + volt).
         "bg-base": "#EDEEF5",
         "brand-green": "#9fff00",
+        volt: "rgb(var(--volt) / <alpha-value>)",
         // Raw BNB gold scale (kept for the wordmark glyph + fixed marks).
         gold: {
           50: "#fdf8e7", 100: "#faedbf", 200: "#f5dc84", 300: "#efc94a",
@@ -35,7 +36,7 @@ const config: Config = {
         // Inter for everything readable; JetBrains Mono for data/addresses/numbers;
         // Instrument Serif italic as the single editorial accent.
         sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-outfit)", "Outfit", "ui-sans-serif", "sans-serif"],
         mono: ["JetBrains Mono Variable", "JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
         serif: ["Instrument Serif", "ui-serif", "Georgia", "serif"],
         // Landing display font (next/font Outfit sets --font-outfit on the landing root).

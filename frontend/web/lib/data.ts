@@ -26,6 +26,7 @@ export type Trade = {
   tradeHash: `0x${string}`;
   pnlBps: bigint;
   closedAt: bigint;
+  txHash: `0x${string}` | null;  // the actual journal tx (BscScan-linkable proof)
 };
 
 export type Stats = {
@@ -78,10 +79,14 @@ export async function fetchAgent(agentId: bigint): Promise<Agent> {
   return { agentId, owner, wallet, uri: uri || null, venue: VENUE };
 }
 
-export async function fetchTrades(agentId: bigint, limit = 50): Promise<Trade[]> {
+// TradeJournal deployed at block 105735625-ish (first journaled trade); scanning from
+// genesis on an env-less setup would take forever — default to just before deploy.
+const JOURNAL_DEPLOY_BLOCK = "105522340";
+
+export async function fetchTrades(agentId: bigint, limit = 500): Promise<Trade[]> {
   if (!configured(ADDR.journal) || agentId <= 0n) return [];
   try {
-    const fromBlock = BigInt(process.env.NEXT_PUBLIC_JOURNAL_FROM_BLOCK ?? "0");
+    const fromBlock = BigInt(process.env.NEXT_PUBLIC_JOURNAL_FROM_BLOCK ?? JOURNAL_DEPLOY_BLOCK);
     // Many BSC RPCs cap a single getLogs range (Alchemy's free tier = 10 blocks). LOG_STEP>0
     // splits the scan into ≤(STEP+1)-block windows so it works there; STEP=0 = one call (for
     // an RPC that serves the full range). SCAN_BLOCKS bounds the scan from fromBlock (0 = to tip).
@@ -116,6 +121,7 @@ export async function fetchTrades(agentId: bigint, limit = 50): Promise<Trade[]>
                 return {
                   agentId: a.agentId, index: a.index, tradeHash: a.tradeHash,
                   pnlBps: a.pnlBps, closedAt: a.closedAt,
+                  txHash: (l.transactionHash as `0x${string}`) ?? null,
                 } as Trade;
               }),
             )

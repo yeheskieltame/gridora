@@ -11,7 +11,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkline, CornerTicks } from "@/components/Sparkline";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { Wordmark } from "@/components/Wordmark";
 import {
   CONTROL_API,
@@ -364,7 +363,6 @@ export default function ConsolePage() {
               />
               {online ? "agent online" : "agent offline"}
             </span>
-            <ThemeToggle />
             {unlocked ? (
               <button
                 type="button"
@@ -420,14 +418,21 @@ export default function ConsolePage() {
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-40 pt-5 sm:px-8">
         {online === false && (
-          <div className="mb-5 rounded-xl border border-neg/40 bg-neg/10 p-4 text-sm">
-            <p className="font-semibold text-neg">Agent offline — no engine at {CONTROL_API}.</p>
-            <p className="mt-1 text-muted">
-              Start it with{" "}
+          <div className="mb-5 rounded-xl border border-line bg-surface p-5 text-sm">
+            <p className="font-display font-semibold lowercase text-fg">
+              this console lives on the operator&apos;s machine.
+            </p>
+            <p className="mt-1.5 text-muted">
+              it drives the agent over a local control API ({CONTROL_API}) — nothing to see
+              here unless you run the agent yourself. the public, verifiable trading record
+              is on the{" "}
+              <a href="/" className="link-quiet text-accent">homepage</a>.
+            </p>
+            <p className="mt-2 text-[12px] text-faint">
+              operator? start the engine with{" "}
               <code className="rounded bg-bg px-1.5 py-0.5 font-mono text-[12px] text-fg">
                 python -m gridora.runner --mode paper --auto --serve
-              </code>{" "}
-              (add <code className="font-mono text-[12px]">--ui</code> to keep the terminal TUI too).
+              </code>
             </p>
           </div>
         )}

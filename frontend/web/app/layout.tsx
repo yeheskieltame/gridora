@@ -1,34 +1,26 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Outfit } from "next/font/google";
 import { Background } from "@/components/Background";
 
+const outfit = Outfit({ subsets: ["latin"], variable: "--font-outfit", display: "swap" });
+
 export const metadata: Metadata = {
-  title: "Gridora · verifiable grid agent on BNB Chain",
+  title: "Gridora · every trade on-chain, read it yourself",
   description:
-    "Non-custodial adaptive-grid trading agent on BNB Smart Chain. Keys never leave the Trust Wallet Agent Kit; every settled trade is mirrored on-chain via an ERC-8004 identity + TradeJournal. No dashboard, no custody, no trust required.",
+    "The public trading record of an autonomous agent on BNB Chain. Every settled trade is signed locally via the Trust Wallet Agent Kit and journaled on-chain under ERC-8004 identity #140004 — no dashboard screenshots, no trust required.",
   openGraph: {
-    title: "Gridora · verifiable grid agent on BNB Chain",
+    title: "Gridora · every trade on-chain, read it yourself",
     description:
-      "Every settled trade verifiably on-chain. ERC-8004 identity + append-only TradeJournal + commit→attest StrategyLedger. Read it without permission.",
+      "The public, verifiable trading record of an autonomous agent on BNB Chain — ERC-8004 identity + append-only TradeJournal + commit→attest StrategyLedger.",
     type: "website",
   },
 };
 
-// Apply the saved theme BEFORE first paint (no flash). Default = light (clean/readable);
-// honor a previous toggle, else the OS preference.
-const THEME_SCRIPT = `(function(){try{
-  var t=localStorage.getItem('gridora-theme');
-  if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}
-  if(t==='dark')document.documentElement.classList.add('dark');
-}catch(e){}})();`;
-
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
-      </head>
-      <body className="min-h-screen antialiased">
+    <html lang="en">
+      <body className={`${outfit.variable} min-h-screen antialiased`}>
         <Background />
         {children}
       </body>
