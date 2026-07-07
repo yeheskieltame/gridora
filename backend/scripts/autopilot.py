@@ -83,6 +83,14 @@ STABLES = {"USDT", "USDC", "FDUSD", "DAI", "WBNB", "BNB"}
 # not the price you get). Volatile-but-executable tokens (LAB/TOSHI/RAVE/SLX) are NOT
 # blacklisted — they're scalp opportunities handled by the WILD profile + the brain.
 THIN_TRAPS = {"AXS", "ZRO"}
+# PRIME tier — deep-liquidity mean-reverting majors. The 2026-07-07 field study of all
+# 123 competition wallets showed the healthiest active traders rotate DAILY through a
+# small set of liquid majors and park back in stables, while the token-spray and P&D
+# hunters bled out (median surviving wallet $15.58 of a $30 start). Prime dips also
+# actually RECOVER, which is what never-red needs. Prime candidates outrank equal scores.
+PRIME = {"CAKE", "ETH", "BTCB", "XRP", "ADA", "DOGE", "LINK", "DOT", "LTC", "UNI",
+         "AVAX", "AAVE", "TRX", "BCH", "ETC", "ATOM", "FET", "INJ", "PENDLE", "LTC"}
+PRIME_BONUS = 10.0
 GATE_PAIR = {"BTCB": "BTC"}   # Gate ticker symbol overrides
 UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 
@@ -519,6 +527,8 @@ def scan_tick(st: dict, ex) -> None:
             log(f"VETO {sym} — {hl_str(w)} = active sell wall on the perp book, skip this round")
             continue
         bonus = (w["imb"] - 0.5) * HL_BONUS_W if w else 0.0
+        if sym in PRIME:
+            bonus += PRIME_BONUS
         passers.append((s + bonus, sym, r, d, w))
     if not passers:
         top = f" | best prefilter: {ranked[0][1]} (turn unconfirmed)" if ranked else ""
