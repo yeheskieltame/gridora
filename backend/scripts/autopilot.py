@@ -76,6 +76,23 @@ THIN_TRAPS = {"AXS", "ZRO"}   # verified untradeable via TWAK (BSC liq $32-49k, 
 GATE_PAIR = {"BTCB": "BTC"}   # Gate ticker symbol overrides
 UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 
+# ---- Hyperliquid whale lens (2026-07-07). Perp book imbalance + OI delta + funding as
+# a candidate TIEBREAK and extreme-sell-wall veto — NOT a hard gate (no historical L2
+# data exists to backtest one). Every buy ledgers its whale read so the signal's real
+# predictive value gets measured from our own trades over time.
+HL_URL = "https://api.hyperliquid.xyz/info"
+HL_MAP = {  # our symbol -> HL perp name (probed 2026-07-07; 29/42 listed)
+    "CAKE": "CAKE", "ETH": "ETH", "BTCB": "BTC", "XRP": "XRP", "ADA": "ADA",
+    "DOGE": "DOGE", "LINK": "LINK", "DOT": "DOT", "LTC": "LTC", "UNI": "UNI",
+    "PENGU": "PENGU", "FIL": "FIL", "ASTER": "ASTER", "WLFI": "WLFI", "BONK": "kBONK",
+    "AVAX": "AVAX", "AAVE": "AAVE", "TRX": "TRX", "ZEC": "ZEC", "BCH": "BCH",
+    "FET": "FET", "XPL": "XPL", "INJ": "INJ", "SHIB": "kSHIB", "ETC": "ETC",
+    "PENDLE": "PENDLE", "ATOM": "ATOM", "STG": "STG", "BRETT": "BRETT",
+}
+HL_BAND = 0.02        # count book notional within ±2% of mid
+HL_VETO_IMB = 0.38    # bids under 38% of near-mid notional = active sell wall, skip this round
+HL_BONUS_W = 40.0     # score bonus per unit of (imbalance - 0.5): 60% bids -> +4 points
+
 
 def log(msg: str) -> None:
     print(f"{time.strftime('%m-%d %H:%M:%S')} {msg}", flush=True)
@@ -219,6 +236,70 @@ def spot_px(sym: str) -> float | None:
     return float(t[0]["last"]) if isinstance(t, list) and t else None
 
 
+# ---------- Hyperliquid whale lens ----------
+def book_imbalance(bids: list[tuple[float, float]], asks: list[tuple[float, float]],
+                   band: float = HL_BAND) -> float | None:
+    """Bid share of near-mid notional: >0.5 = buyers stacking, <0.5 = sell wall.
+    bids/asks = [(px, sz)] best-first. Pure (covered by --selfcheck)."""
+    if not bids or not asks:
+        return None
+    mid = (bids[0][0] + asks[0][0]) / 2
+    b = sum(px * sz for px, sz in bids if px >= mid * (1 - band))
+    a = sum(px * sz for px, sz in asks if px <= mid * (1 + band))
+    return b / (b + a) if (b + a) > 0 else None
+
+
+_hl_ctx_cache: dict = {"ts": 0.0, "oi": {}, "funding": {}}
+
+
+def hl_ctxs() -> dict:
+    """One metaAndAssetCtxs call covers every coin — cache it per scan (60s)."""
+    if time.time() - _hl_ctx_cache["ts"] < 60:
+        return _hl_ctx_cache
+    r = get(HL_URL, post=json.dumps({"type": "metaAndAssetCtxs"}).encode())
+    try:
+        meta, ctxs = r
+        oi, fund = {}, {}
+        for asset, ctx in zip(meta["universe"], ctxs):
+            oi[asset["name"]] = float(ctx.get("openInterest") or 0)
+            fund[asset["name"]] = float(ctx.get("funding") or 0)
+        _hl_ctx_cache.update(ts=time.time(), oi=oi, funding=fund)
+    except Exception:  # noqa: BLE001 — HL down = lens off, bot unaffected
+        pass
+    return _hl_ctx_cache
+
+
+def hl_whale(sym: str, st: dict) -> dict | None:
+    """{imb, oi_chg_pct, funding} for a candidate, or None when unlisted/unreachable."""
+    coin = HL_MAP.get(sym)
+    if not coin:
+        return None
+    book = get(HL_URL, post=json.dumps({"type": "l2Book", "coin": coin}).encode())
+    try:
+        raw_b, raw_a = book["levels"][0], book["levels"][1]
+        imb = book_imbalance([(float(x["px"]), float(x["sz"])) for x in raw_b],
+                             [(float(x["px"]), float(x["sz"])) for x in raw_a])
+    except Exception:  # noqa: BLE001
+        return None
+    if imb is None:
+        return None
+    ctx = hl_ctxs()
+    oi_now = ctx["oi"].get(coin)
+    prev = st.setdefault("hl_oi", {}).get(sym)
+    oi_chg = ((oi_now / prev - 1) * 100) if (oi_now and prev) else None
+    if oi_now:
+        st["hl_oi"][sym] = oi_now
+    return {"imb": imb, "oi_chg": oi_chg, "funding": ctx["funding"].get(coin)}
+
+
+def hl_str(w: dict | None) -> str:
+    if not w:
+        return "HL n/a"
+    oi = f" OI {w['oi_chg']:+.1f}%" if w.get("oi_chg") is not None else ""
+    fu = f" fund {w['funding']*100:+.4f}%" if w.get("funding") is not None else ""
+    return f"HL bid {w['imb']*100:.0f}%{oi}{fu}"
+
+
 # ---------- execution (live = Trader/TWAK; paper = simulated fills at Gate px) ----------
 class Live:
     def __init__(self):
@@ -357,22 +438,29 @@ def scan_tick(st: dict, ex) -> None:
         if s is not None:
             ranked.append((s, sym, r))
     ranked.sort(reverse=True)
-    best = None
+    passers = []
     for s, sym, r in ranked[:5]:
         d = deep(sym)
-        if d and d["base"] and d["up"] and d["taker"] >= TAKER_MIN:
-            best = (sym, r, d); break
-    if not best:
+        if not (d and d["base"] and d["up"] and d["taker"] >= TAKER_MIN):
+            continue
+        w = hl_whale(sym, st)
+        if w and w["imb"] < HL_VETO_IMB:
+            log(f"VETO {sym} — {hl_str(w)} = active sell wall on the perp book, skip this round")
+            continue
+        bonus = (w["imb"] - 0.5) * HL_BONUS_W if w else 0.0
+        passers.append((s + bonus, sym, r, d, w))
+    if not passers:
         top = f" | best prefilter: {ranked[0][1]} (turn unconfirmed)" if ranked else ""
         st["pending"] = None
         log(f"scan: no dip-turn ({len(tk)} tickers, {len(ranked)} dips) | {btc}{top}"); return
 
-    sym, r, d = best
+    passers.sort(key=lambda x: -x[0])
+    _, sym, r, d, w = passers[0]
     p = st.get("pending")
     count = p["count"] + 1 if p and p["sym"] == sym else 1
     st["pending"] = {"sym": sym, "count": count}
     log(f"CANDIDATE {sym} ${r['px']:.6g} | pos {r['pos']*100:.0f}% rng {r['rng']:.1f}% room {r['room']:.1f}% "
-        f"| taker {d['taker']:.0f}% 5m {d['m5']:+.1f}% base ok | confirm {count}/{CONFIRM_SCANS} | {btc}")
+        f"| taker {d['taker']:.0f}% 5m {d['m5']:+.1f}% base ok | {hl_str(w)} | confirm {count}/{CONFIRM_SCANS} | {btc}")
     if count < CONFIRM_SCANS:
         return
 
@@ -389,7 +477,10 @@ def scan_tick(st: dict, ex) -> None:
     st["pos"] = {"sym": sym, "qty": qty, "cost": cost, "eff": eff, "ts": now}
     st["peak"] = None; st["px_peak"] = None; st["last_alert"] = 0
     ledger({"event": "buy", "sym": sym, "qty": qty, "cost": cost, "eff": eff,
-            "taker": d["taker"], "pos": r["pos"]})
+            "taker": d["taker"], "pos": r["pos"],
+            "hl_imb": w["imb"] if w else None,
+            "hl_oi_chg": w.get("oi_chg") if w else None,
+            "hl_funding": w.get("funding") if w else None})
     notify("Gridora Autopilot", f"BUY {sym} ${cost:.2f} @ {eff:.6g}")
     log(f"✅ ALL-IN {qty:.6g} {sym} for ${cost:.2f} @ eff ${eff:.6g} | BE ~${(cost+GAS_USD)/(qty*(1-SELL_FRIC)):.6g}")
 
@@ -443,7 +534,7 @@ def manage_tick(st: dict, ex) -> None:
     if int(time.time()) % 300 < HOLD_POLL:
         sl = f"+${ratchet_floor(peak, cost*(RIDE_GAP_PCT if btc_ok else LOCK_GAP_PCT)):.2f}" if peak is not None and peak >= ARM else "arms at BE"
         log(f"[hold {age_h:.1f}h] {sym} ${px:.6g} net ${n:+.2f} SL {sl} peak +${peak or 0:.2f} "
-            f"| 5m {m5:+.1f}% taker {taker:.0f}% | {btc}")
+            f"| 5m {m5:+.1f}% taker {taker:.0f}% | {hl_str(hl_whale(sym, st))} | {btc}")
 
 
 def reconcile(st: dict, ex, paper: bool) -> None:
@@ -498,6 +589,14 @@ def selfcheck() -> None:
     # knife vs base
     assert base_formed([10, 9.5, 9, 8.5, 8, 8, 8, 8, 8.1, 8.05, 8.2, 8.1])       # floor held = base
     assert not base_formed([10, 9.5, 9, 8.5, 8, 7.8, 7.6, 7.4, 7.2, 7.0, 6.8, 6.6])  # falling knife
+    # whale lens: near-mid book imbalance
+    bal = book_imbalance([(100.0, 10.0)], [(100.2, 10.0)])
+    assert bal is not None and 0.48 < bal < 0.52                     # balanced book ≈ 0.5
+    heavy = book_imbalance([(100.0, 30.0)], [(100.2, 10.0)])
+    assert heavy is not None and heavy > 0.7                         # bid-stacked = whales in
+    far = book_imbalance([(100.0, 10.0), (90.0, 999.0)], [(100.2, 10.0)])
+    assert far is not None and abs(far - bal) < 0.01                 # >2% from mid = ignored
+    assert book_imbalance([], [(100.2, 10.0)]) is None               # no bids = no read
     print("selfcheck OK")
 
 
