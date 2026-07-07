@@ -43,6 +43,10 @@ VOL_MIN = 1_000_000      # $ Gate 24h quote volume (dead books have useless take
 CHG24_MAX = 9.0          # % — above = parabolic top, never buy (MOM_24H_MAX lesson)
 CHG24_MIN = -20.0        # % — below = collapsing, not a dip
 RANGE_MIN = 4.5          # % 24h high/low — tighter ranges can't clear the ~3% round-trip
+RANGE_MAX = 18.0         # % — wider = post-crash chaos, not a dip venue (LAB post-mortem
+                         # 2026-07-07: rng 36% AND the old score REWARDED it via room ×2)
+WILD7D_MAX = 60.0        # % 7d high/low swing — above = collapsed parabola / dead-cat regime
+                         # (LAB's week was 230%: $18.45 high, $5.58 low). Structural guard.
 POS_MAX = 0.45           # buy only in the lower 45% of the 24h range (a real discount)
 ROOM_MIN = 3.5           # % to the 24h high — need profit room before the wall
 TAKER_MIN = 54.0         # % buy-side of last 200 trades — buyers actually back
@@ -72,7 +76,11 @@ STATE_F = os.path.join(STATE_DIR, "autopilot.json")
 LEDGER_F = os.path.join(STATE_DIR, "trades.jsonl")
 
 STABLES = {"USDT", "USDC", "FDUSD", "DAI", "WBNB", "BNB"}
-THIN_TRAPS = {"AXS", "ZRO"}   # verified untradeable via TWAK (BSC liq $32-49k, price lags CEX)
+# AXS/ZRO: untradeable via TWAK (BSC liq $32-49k, price lags CEX). LAB: thin low-float
+# chaos, burned us 4x (−$1.29, −$0.76, −$4+ 2026-07-07 post-mortem). TOSHI: BSC pool
+# diverges from Gate on spikes (scratch-or-loss lottery). RAVE: thin parabolic, BSC price
+# once detached 42% from Gate. SLX: repeat catastrophic collapser in every backtest window.
+THIN_TRAPS = {"AXS", "ZRO", "LAB", "TOSHI", "RAVE", "SLX"}
 GATE_PAIR = {"BTCB": "BTC"}   # Gate ticker symbol overrides
 UA = {"User-Agent": "Mozilla/5.0", "Content-Type": "application/json"}
 
@@ -162,9 +170,16 @@ def dip_score(chg24: float, rng: float, pos: float, room: float, vol: float) -> 
     """Prefilter a Gate ticker row; None = not a dip candidate."""
     if not (CHG24_MIN <= chg24 <= CHG24_MAX):
         return None
-    if rng < RANGE_MIN or pos > POS_MAX or room < ROOM_MIN or vol < VOL_MIN:
+    if rng < RANGE_MIN or rng > RANGE_MAX or pos > POS_MAX or room < ROOM_MIN or vol < VOL_MIN:
         return None
     return (POS_MAX - pos) * 40 + room * 2
+
+
+def wild_range(highs: list[float], lows: list[float]) -> float:
+    """7d high/low swing in % — the collapsed-parabola / dead-cat detector (pure)."""
+    if not highs or not lows or min(lows) <= 0:
+        return 0.0
+    return (max(highs) / min(lows) - 1) * 100
 
 
 def base_formed(lows: list[float]) -> bool:
@@ -218,6 +233,7 @@ def deep(sym: str) -> dict | None:
     pair = GATE_PAIR.get(sym, sym) + "_USDT"
     k15 = get(f"https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair={pair}&interval=15m&limit=16")
     k5 = get(f"https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair={pair}&interval=5m&limit=3")
+    k1d = get(f"https://api.gateio.ws/api/v4/spot/candlesticks?currency_pair={pair}&interval=1d&limit=10")
     trd = get(f"https://api.gateio.ws/api/v4/spot/trades?currency_pair={pair}&limit=200")
     if not (isinstance(k15, list) and isinstance(k5, list) and isinstance(trd, list)):
         return None
@@ -228,7 +244,12 @@ def deep(sym: str) -> dict | None:
     bb = sum(float(x["amount"]) * float(x["price"]) for x in trd if x["side"] == "buy")
     ss = sum(float(x["amount"]) * float(x["price"]) for x in trd if x["side"] == "sell")
     taker = bb / (bb + ss) * 100 if (bb + ss) else 50.0
-    return {"base": base_formed(lows), "up": up, "m5": m5, "taker": taker}
+    # the daily-scale view the LAB post-mortem demanded: 7d wildness + closes for the brain
+    d_hi = [float(c[3]) for c in k1d[-7:]] if isinstance(k1d, list) else []
+    d_lo = [float(c[4]) for c in k1d[-7:]] if isinstance(k1d, list) else []
+    d_cl = [float(c[2]) for c in k1d] if isinstance(k1d, list) else []
+    return {"base": base_formed(lows), "up": up, "m5": m5, "taker": taker,
+            "wild7d": wild_range(d_hi, d_lo), "d_closes": d_cl}
 
 
 def spot_px(sym: str) -> float | None:
@@ -290,6 +311,51 @@ def hl_whale(sym: str, st: dict) -> dict | None:
     if oi_now:
         st["hl_oi"][sym] = oi_now
     return {"imb": imb, "oi_chg": oi_chg, "funding": ctx["funding"].get(coin)}
+
+
+# ---------- the brain: Claude (Opus) as mandatory pre-entry risk officer ----------
+# The LAB post-mortem's third layer: mechanical filters can't smell token character.
+# Before ANY buy, a headless `claude --print --model opus` call reviews the full brief
+# and may VETO. Veto-only power: it cannot force an entry, cannot touch exits, and the
+# deterministic guardrails (never-red, quote-dev, knife, wild7d) still hard-enforce.
+# WAJIB per user 2026-07-07: no verdict (CLI down/timeout) = no entry.
+BRAIN_MODEL = os.environ.get("GRIDORA_BRAIN_MODEL", "opus")
+
+
+def parse_verdict(text: str) -> dict | None:
+    """Extract {"enter": bool, "confidence": int, "reason": str} from model output (pure)."""
+    try:
+        i, j = text.index("{"), text.rindex("}") + 1
+        v = json.loads(text[i:j])
+        if isinstance(v.get("enter"), bool):
+            return {"enter": v["enter"], "confidence": int(v.get("confidence", 0)),
+                    "reason": str(v.get("reason", ""))[:200]}
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def brain_verdict(sym: str, brief: dict) -> dict | None:
+    prompt = (
+        "You are the final risk officer for a small live spot-trading bot on BNB Chain "
+        "(~$30 all-in per trade, dip-buy only, NEVER sells at a loss — a bad entry traps "
+        "the whole stack for days). Mechanical filters already passed this candidate. "
+        "Your ONLY job is to veto entries with character problems the filters miss: "
+        "collapsed parabolas, dead-cat bounces, thin/low-float or manipulated chaos, "
+        "post-pump distribution, macro risk-off, anything a seasoned trader walks away "
+        "from. Study daily_closes_10d for the multi-day story. Be strict — a missed win "
+        "costs little, a trapped position costs days. DATA:\n"
+        + json.dumps(brief)
+        + '\nReply with STRICT JSON only: {"enter": true|false, "confidence": 0-100, '
+        '"reason": "<max 140 chars>"}'
+    )
+    try:
+        p = subprocess.run(["claude", "--print", "--model", BRAIN_MODEL, prompt],
+                           capture_output=True, text=True, timeout=180)
+        return parse_verdict(p.stdout or "")
+    except Exception as e:  # noqa: BLE001
+        log(f"!! brain error: {str(e)[:100]}")
+        return None
 
 
 def hl_str(w: dict | None) -> str:
@@ -443,6 +509,10 @@ def scan_tick(st: dict, ex) -> None:
         d = deep(sym)
         if not (d and d["base"] and d["up"] and d["taker"] >= TAKER_MIN):
             continue
+        if d["wild7d"] > WILD7D_MAX:
+            log(f"WILD {sym} — 7d swing {d['wild7d']:.0f}% > {WILD7D_MAX:.0f}% = "
+                "collapsed-parabola regime, not a dip — skip")
+            continue
         w = hl_whale(sym, st)
         if w and w["imb"] < HL_VETO_IMB:
             log(f"VETO {sym} — {hl_str(w)} = active sell wall on the perp book, skip this round")
@@ -465,6 +535,22 @@ def scan_tick(st: dict, ex) -> None:
         return
 
     st["pending"] = None
+    # THE BRAIN GATE (wajib): Opus reviews the full brief; no verdict = no entry.
+    brief = {"candidate": sym, "price_usd": r["px"], "pos_in_24h_range": round(r["pos"], 3),
+             "range_24h_pct": round(r["rng"], 1), "room_to_24h_high_pct": round(r["room"], 1),
+             "chg_24h_pct": round(r["chg24"], 1), "taker_buy_pct": round(d["taker"], 0),
+             "chg_5m_pct": round(d["m5"], 2), "wild7d_swing_pct": round(d["wild7d"], 0),
+             "daily_closes_10d": d["d_closes"],
+             "hyperliquid_whale": w, "btc_regime": btc}
+    v = brain_verdict(sym, brief)
+    if v is None:
+        log(f"!! brain unavailable for {sym} — entry skipped (no verdict = no entry)")
+        st["cooldown"][sym] = now; return
+    if not v["enter"]:
+        log(f"🧠 BRAIN VETO {sym} ({v['confidence']}%): {v['reason']}")
+        notify("Gridora Brain", f"VETO {sym}: {v['reason'][:90]}")
+        st["cooldown"][sym] = now; return
+    log(f"🧠 BRAIN GO {sym} ({v['confidence']}%): {v['reason']}")
     if not ex.bnb_ok():
         notify("Gridora Autopilot", "BNB gas habis — top up dulu, entry di-skip")
         log("!! BNB below gas floor — entry skipped"); return
@@ -477,10 +563,11 @@ def scan_tick(st: dict, ex) -> None:
     st["pos"] = {"sym": sym, "qty": qty, "cost": cost, "eff": eff, "ts": now}
     st["peak"] = None; st["px_peak"] = None; st["last_alert"] = 0
     ledger({"event": "buy", "sym": sym, "qty": qty, "cost": cost, "eff": eff,
-            "taker": d["taker"], "pos": r["pos"],
+            "taker": d["taker"], "pos": r["pos"], "wild7d": d["wild7d"],
             "hl_imb": w["imb"] if w else None,
             "hl_oi_chg": w.get("oi_chg") if w else None,
-            "hl_funding": w.get("funding") if w else None})
+            "hl_funding": w.get("funding") if w else None,
+            "llm_confidence": v["confidence"], "llm_reason": v["reason"]})
     notify("Gridora Autopilot", f"BUY {sym} ${cost:.2f} @ {eff:.6g}")
     log(f"✅ ALL-IN {qty:.6g} {sym} for ${cost:.2f} @ eff ${eff:.6g} | BE ~${(cost+GAS_USD)/(qty*(1-SELL_FRIC)):.6g}")
 
@@ -589,6 +676,16 @@ def selfcheck() -> None:
     # knife vs base
     assert base_formed([10, 9.5, 9, 8.5, 8, 8, 8, 8, 8.1, 8.05, 8.2, 8.1])       # floor held = base
     assert not base_formed([10, 9.5, 9, 8.5, 8, 7.8, 7.6, 7.4, 7.2, 7.0, 6.8, 6.6])  # falling knife
+    # post-mortem guards: chaos range cap + collapsed-parabola detector
+    assert dip_score(2.0, 36.0, 0.30, 5.0, 5e6) is None             # LAB's rng 36% = rejected now
+    assert dip_score(2.0, 12.0, 0.30, 5.0, 5e6) is not None         # healthy volatility still passes
+    assert wild_range([18.45, 16.9, 15.2], [5.58, 8.3, 13.6]) > 200  # LAB's week = 230% = wild
+    assert wild_range([10.5, 10.2], [9.8, 9.6]) < 10                 # calm week passes
+    # brain verdict parsing (fenced, plain, garbage)
+    assert parse_verdict('```json\n{"enter": false, "confidence": 88, "reason": "dead cat"}\n```') == \
+        {"enter": False, "confidence": 88, "reason": "dead cat"}
+    assert parse_verdict('{"enter": true, "confidence": 70, "reason": "ok"}')["enter"] is True
+    assert parse_verdict("I think yes") is None
     # whale lens: near-mid book imbalance
     bal = book_imbalance([(100.0, 10.0)], [(100.2, 10.0)])
     assert bal is not None and 0.48 < bal < 0.52                     # balanced book ≈ 0.5
