@@ -79,10 +79,11 @@ STATE_F = os.path.join(STATE_DIR, "autopilot.json")
 LEDGER_F = os.path.join(STATE_DIR, "trades.jsonl")
 
 STABLES = {"USDT", "USDC", "FDUSD", "DAI", "WBNB", "BNB"}
-# EXECUTION-impossible only (TWAK can't route their thin BSC pools; the price you see is
-# not the price you get). Volatile-but-executable tokens (LAB/TOSHI/RAVE/SLX) are NOT
-# blacklisted — they're scalp opportunities handled by the WILD profile + the brain.
-THIN_TRAPS = {"AXS", "ZRO"}
+# AXS/ZRO: execution-impossible (TWAK can't route their thin BSC pools). SLX: EMPIRICAL
+# serial collapser — poisoned every 2026-07-07 backtest window it entered (open bag −$17
+# to −$18 in 4 independent studies; removing ONLY SLX flipped 30d from −$18.47 to +$2.35).
+# Volatile-but-honest tokens (LAB/TOSHI/RAVE) stay in — WILD profile + brain handle them.
+THIN_TRAPS = {"AXS", "ZRO", "SLX"}
 # PRIME tier — deep-liquidity mean-reverting majors. The 2026-07-07 field study of all
 # 123 competition wallets showed the healthiest active traders rotate DAILY through a
 # small set of liquid majors and park back in stables, while the token-spray and P&D

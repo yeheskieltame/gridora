@@ -372,3 +372,203 @@ def seven_study() -> None:
 
 if "--seven" in sys.argv:
     seven_study()
+
+
+# ═══════════ SCALP-MODE SIM (mirrors the LIVE 2026-07-07 logic) ═══════════
+def daily_windows(cs):
+    """Per-candle rolling 7d hi/lo (from per-day aggregates — cheap + matches live's
+    daily-candle wild7d)."""
+    n = len(cs)
+    day_of = [c[0] // 86400 for c in cs]
+    dhi, dlo = {}, {}
+    for t, cl, hi, lo, v in cs:
+        d = t // 86400
+        dhi[d] = max(dhi.get(d, hi), hi)
+        dlo[d] = min(dlo.get(d, lo), lo)
+    wild = [0.0] * n
+    for i in range(n):
+        d = day_of[i]
+        his = [dhi[x] for x in range(d - 6, d + 1) if x in dhi]
+        los = [dlo[x] for x in range(d - 6, d + 1) if x in dlo]
+        wild[i] = ap.wild_range(his, los)
+    return wild
+
+
+def scalp_sim(data, stats, wilds, btc, ticks, idx,
+              scalp_tp, calm_tp, pos_max, wild_thr) -> dict:
+    usdt = START_USD
+    pos = None      # (sym, qty, cost, peak, wild, t0)
+    cooldown, pending = {}, None
+    trades, holds, daily = [], [], {}
+    eq_peak, max_dd = START_USD, 0.0
+    for t in ticks:
+        ok_btc = btc.get(t, (True, 0.0))[0]
+        if pos:
+            sym, qty, cost, peak, wild, t0 = pos
+            j = idx[sym].get(t)
+            if j is None:
+                continue
+            px = data[sym][j][1]
+            n = ap.net_of(qty, px, cost)
+            peak = max(peak, n)
+            pos = (sym, qty, cost, peak, wild, t0)
+            tp = (scalp_tp if wild else calm_tp) * cost
+            sell = None
+            if n >= tp:
+                sell = "tp"
+            elif peak >= ap.ARM:
+                gap = cost * (ap.SCALP_GAP_PCT if wild else (ap.RIDE_GAP_PCT if ok_btc else ap.LOCK_GAP_PCT))
+                if ap.should_lock(n, ap.ratchet_floor(peak, gap)):
+                    sell = "lock"
+            if sell:
+                usdt += qty * px * (1 - ap.SELL_FRIC) - ap.GAS_USD
+                trades.append(n); holds.append((t - t0) / 3600)
+                daily[t // 86400] = daily.get(t // 86400, 0) + 1
+                cooldown[sym] = t + ap.COOLDOWN_MIN * 60
+                pos = None
+            eq = usdt if not pos else usdt + qty * px * (1 - ap.SELL_FRIC)
+        else:
+            eq = usdt
+            if ok_btc:
+                best = None
+                for sym, st in stats.items():
+                    j = idx[sym].get(t)
+                    s = st[j] if j is not None else None
+                    if not s or t < cooldown.get(sym, 0):
+                        continue
+                    sc = ap.dip_score(s["chg24"], s["rng"], s["pos"], s["room"], s["vol"])
+                    if sc is None or s["pos"] > pos_max or not (s["base"] and s["up"]):
+                        continue
+                    if sym in ap.PRIME:
+                        sc += ap.PRIME_BONUS
+                    if best is None or sc > best[0]:
+                        best = (sc, sym, s, wilds[sym][j] > wild_thr)
+                if best:
+                    _, sym, s, wl = best
+                    if pending and pending[0] == sym:
+                        amt = usdt - float(ap.RESERVE)
+                        if amt >= 5:
+                            qty = amt * (1 - ap.SELL_FRIC) / s["px"]
+                            usdt -= amt
+                            pos = (sym, qty, amt, -9e9, wl, t)
+                        pending = None
+                    else:
+                        pending = (sym, t)
+                else:
+                    pending = None
+            else:
+                pending = None
+        eq_peak = max(eq_peak, eq)
+        max_dd = max(max_dd, (eq_peak - eq) / eq_peak)
+    open_mtm = 0.0
+    if pos:
+        sym, qty, cost, *_ = pos
+        open_mtm = ap.net_of(qty, data[sym][-1][1], cost)
+    wins = [x for x in trades if x > 0]
+    days = max(1, (ticks[-1] - ticks[0]) / 86400) if ticks else 1
+    return {"pnl": usdt + (pos[2] + open_mtm if pos else 0) - START_USD,
+            "closed": len(trades), "win": len(wins) / len(trades) * 100 if trades else 0,
+            "tpd": len(trades) / days, "dd": max_dd * 100,
+            "hold": sum(holds) / len(holds) if holds else 0,
+            "open": f"{pos[0]} {open_mtm:+.2f}" if pos else "-"}
+
+
+def scalp_study() -> None:
+    days = int(sys.argv[sys.argv.index("--days") + 1]) if "--days" in sys.argv else 30
+    syms = ap.universe()
+    print(f"fetching {days}d x 5m for BTC + {len(syms)} tokens...", flush=True)
+    btc_cs = candles_5m("BTC_USDT", days)
+    data = {}
+    for s in syms:
+        cs = candles_5m(ap.GATE_PAIR.get(s, s) + "_USDT", days)
+        if len(cs) > WARM + 100:
+            data[s] = cs
+    print(f"{len(data)} tokens usable", flush=True)
+    stats = {s: precompute(cs) for s, cs in data.items()}
+    wilds = {s: daily_windows(cs) for s, cs in data.items()}
+    idx = {s: {c[0]: i for i, c in enumerate(cs)} for s, cs in data.items()}
+    bidx = {c[0]: i for i, c in enumerate(btc_cs)}
+    btc = {}
+    for t, i in bidx.items():
+        if i >= WARM:
+            c1h = (btc_cs[i][1] / btc_cs[i - 12][1] - 1) * 100
+            c24 = (btc_cs[i][1] / btc_cs[i - WARM][1] - 1) * 100
+            btc[t] = (c1h >= ap.BTC_1H_MIN and c24 >= ap.BTC_24H_MIN, c1h)
+    all_ts = set()
+    for s in idx:
+        all_ts.update(idx[s].keys())
+    full = sorted(all_ts & set(btc))
+    # three windows from ONE dataset (apples-to-apples): full 30d, last 14d, last 7d
+    cut14 = full[-1] - 14 * 86400
+    cut7 = full[-1] - 7 * 86400
+    windows = {"30d": full, "14d": [t for t in full if t >= cut14], "7d": [t for t in full if t >= cut7]}
+
+    grid = list(itertools.product((0.008, 0.012, 0.018), (0.015, 0.020, 0.030),
+                                  (0.35, 0.45, 0.55), (45.0, 60.0, 80.0)))
+    print(f"grid {len(grid)} configs x 3 windows", flush=True)
+    rows = []
+    for stp, ctp, pm, wt in grid:
+        rs = {w: scalp_sim(data, stats, wilds, btc, ticks, idx, stp, ctp, pm, wt)
+              for w, ticks in windows.items()}
+        worst = min(r["pnl"] for r in rs.values())
+        rows.append(((stp, ctp, pm, wt), rs, worst))
+    rows.sort(key=lambda x: -x[2])   # maximin: best worst-window pnl = robust
+    print(f"\n{'stp':>5} {'ctp':>5} {'pos':>4} {'wild':>4} | " +
+          " | ".join(f"{w}: pnl closed win tpd dd" for w in windows))
+    for cfg, rs, worst in rows[:12]:
+        line = " | ".join(f"{rs[w]['pnl']:+6.2f} {rs[w]['closed']:>3} {rs[w]['win']:>3.0f} "
+                          f"{rs[w]['tpd']:.1f} {rs[w]['dd']:>4.1f}" for w in windows)
+        print(f"{cfg[0]:>5} {cfg[1]:>5} {cfg[2]:>4} {cfg[3]:>4} | {line}")
+    # current live config for reference
+    cur = next((rs for cfg, rs, _ in rows if cfg == (0.012, 0.020, 0.45, 60.0)), None)
+    if cur:
+        print("\nlive config (0.012/0.020/0.45/60):",
+              " | ".join(f"{w} {cur[w]['pnl']:+.2f}$ {cur[w]['closed']}tr {cur[w]['win']:.0f}%" for w in windows))
+
+
+if "--scalp" in sys.argv:
+    scalp_study()
+
+
+def prime_study() -> None:
+    """Does restricting ENTRIES to PRIME majors (the field-study winners' habitat)
+    fix the stuck-bag problem? Also reveal WHICH token traps each config."""
+    days = int(sys.argv[sys.argv.index("--days") + 1]) if "--days" in sys.argv else 30
+    syms = ap.universe()
+    btc_cs = candles_5m("BTC_USDT", days)
+    data = {}
+    for s in syms:
+        cs = candles_5m(ap.GATE_PAIR.get(s, s) + "_USDT", days)
+        if len(cs) > WARM + 100:
+            data[s] = cs
+    stats = {s: precompute(cs) for s, cs in data.items()}
+    wilds = {s: daily_windows(cs) for s, cs in data.items()}
+    idx = {s: {c[0]: i for i, c in enumerate(cs)} for s, cs in data.items()}
+    bidx = {c[0]: i for i, c in enumerate(btc_cs)}
+    btc = {}
+    for t, i in bidx.items():
+        if i >= WARM:
+            c1h = (btc_cs[i][1] / btc_cs[i - 12][1] - 1) * 100
+            c24 = (btc_cs[i][1] / btc_cs[i - WARM][1] - 1) * 100
+            btc[t] = (c1h >= ap.BTC_1H_MIN and c24 >= ap.BTC_24H_MIN, c1h)
+    all_ts = set()
+    for s in idx:
+        all_ts.update(idx[s].keys())
+    full = sorted(all_ts & set(btc))
+    windows = {"30d": full,
+               "14d": [t for t in full if t >= full[-1] - 14 * 86400],
+               "7d": [t for t in full if t >= full[-1] - 7 * 86400]}
+    for label, universe_syms in (("ALL-42", list(data)), ("minus-SLX", [s for s in data if s != "SLX"]), ("PRIME-only", [s for s in data if s in ap.PRIME])):
+        sub_stats = {s: stats[s] for s in universe_syms}
+        print(f"\n=== entries from {label} ({len(universe_syms)} tokens) ===")
+        for stp, ctp, pm in ((0.012, 0.020, 0.45), (0.018, 0.030, 0.45), (0.012, 0.020, 0.55)):
+            rs = {w: scalp_sim(data, sub_stats, wilds, btc, t, idx, stp, ctp, pm, 60.0)
+                  for w, t in windows.items()}
+            line = " | ".join(f"{w} {r['pnl']:+6.2f}$ {r['closed']:>3}tr {r['win']:>3.0f}% "
+                              f"{r['tpd']:.1f}/d dd{r['dd']:.0f}% open[{r['open']}]"
+                              for w, r in rs.items())
+            print(f"tp {stp}/{ctp} pos {pm}: {line}")
+
+
+if "--prime" in sys.argv:
+    prime_study()
