@@ -62,6 +62,31 @@ BSC_TOKENS: dict[str, tuple[str, int]] = {
     "LAB":   ("0x7ec43Cf65F1663F820427C62A5780b8f2E25593A", 18),  # LAB — crash-resilient momentum; verified 2026-06-25 (TWAK quote symbol LAB, +0.3% vs CMC). WARNING: thin BSC DEX liq ($0.7M); small size only
     "AAVE":  ("0xfb6115445bff7b52feb98650c87f44907e58f802", 18),  # Binance-Peg AAVE — blue-chip momentum; verified 2026-06-26 (TWAK quote symbol AAVE, ~+1% vs CMC, priceImpact 0 same price $14 vs $28 — LiquidMesh aggregates 30 thin BSC pools, fine at small size)
     "TOSHI": ("0x6a2608Dabe09bc1128EEC7275B92DFB939D5Db3f", 18),  # Toshi (BSC meme) — US-session momentum; verified 2026-06-28 (TWAK quote by addr, eff $0.0001274 ≈ Gate +1.1%, pancake liq $407k). Extended meme — small size + tight SL only
+    # CMC-benefit expansion sweep 2026-07-07 (scripts/universe_expand.py): each passed
+    # ALL of — CMC vol24h ≥ $20M, has a BSC contract (CMC v2/info), TWAK quote-by-address
+    # within ±3% of CMC (routability + landmine), Gate SYM_USDT pair exists (taker data),
+    # and on-chain decimals()/symbol() verified via RPC. Excluded despite passing:
+    # U/STABLE/USDE/TUSD/XAUT (stables/pegged — nothing to dip-trade), SKYAI (serial P&D).
+    "TRX":   ("0xCE7de646e7208a4Ef112cb6ed5038FA6cC6b12e3", 6),   # ⚠️ 6-decimal! vol $554M, dev 0.4%
+    "ZEC":   ("0x1ba42e5193dfa8b03d15dd1b86a3113bbbef8eeb", 18),  # vol $428M, dev 0.9%
+    "BCH":   ("0x8fF795a6F4D97E7887C79beA79aba5cc76444aDf", 18),  # vol $179M, dev 1.1%
+    "FET":   ("0x031b41e504677879370e9dbcf937283a8691fa7f", 18),  # vol $149M, dev 1.1%
+    "XPL":   ("0x405FBc9004D857903bFD6b3357792D71a50726b0", 18),  # vol $121M, dev 0.9%
+    "HTX":   ("0x61ec85ab89377db65762e234c946b5c25a56e99e", 18),  # vol $100M, dev 2.6% (watch)
+    "YFI":   ("0x88f1a5ae2a3bf98aeaf342d26b30a79438c9142e", 18),  # vol $83M, dev 0.7%
+    "INJ":   ("0xa2b726b1145a4773f68593cf171187d8ebe4d495", 18),  # vol $83M, dev 0.8%
+    "SHIB":  ("0x2859e4544c4bb03966803b044a93563bd2d0dd4d", 18),  # vol $74M, dev 0.9%
+    "DEXE":  ("0x6E88056E8376Ae7709496Ba64d37fa2f8015ce3e", 18),  # vol $61M, dev 0.9%
+    "KITE":  ("0x904567252D8F48555b7447c67dCA23F0372E16be", 18),  # vol $40M, dev 1.5%
+    "ETC":   ("0x3d6545b08693dae087e957cb1180ee38b9e3c25e", 18),  # vol $39M, dev 1.7%
+    "PENDLE": ("0xb3Ed0A426155B79B898849803E3B36552f7ED507", 18), # vol $36M, dev 1.6%
+    "EDGE":  ("0x70f2eadf1ca1969ff42b0c78e9da519e8937cbaf", 18),  # vol $32M, dev 1.6%
+    "ZAMA":  ("0x6907a5986c4950bdaf2f81828ec0737ce787519f", 18),  # vol $30M, dev 0.9%
+    "ATOM":  ("0x0eb3a705fc54725037cc9e008bdede697f62f335", 18),  # vol $29M, dev 0.8%
+    "BEAT":  ("0xcf3232B85b43BCa90E51D38cc06Cc8bB8C8A3E36", 18),  # vol $25M, dev 1.9%
+    "STG":   ("0xb0d502e938ed5f4df2e681fe6e419ff29631d62b", 18),  # vol $24M, dev 2.5% (watch)
+    "BRETT": ("0xa7440029eca41deabd8775ef1d6086b37d4df8d6", 18),  # vol $22M, dev 0.7%
+    "M":     ("0x22b1458e780f8fa71e2f84502cee8b5a3cc731fa", 18),  # vol $21M, dev 0.8% — routable NOW (was not on 2026-06-26)
 }
 
 # TESTNET (97). Sparse on purpose — testnet liquidity is thin; TWAK resolves symbols.

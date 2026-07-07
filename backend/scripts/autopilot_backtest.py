@@ -26,6 +26,8 @@ import scripts.autopilot as ap
 CACHE = os.path.join(os.path.dirname(__file__), "..", ".bt_cache")
 UA = {"User-Agent": "Mozilla/5.0"}
 START_USD = 30.0
+SEVEN_ON = False
+SEVEN_LO, SEVEN_HI = -25.0, 40.0
 WARM = 288          # 24h of 5m candles before trading starts
 STEP_5M = 300
 
@@ -90,6 +92,7 @@ def precompute(cs: list[tuple[int, float, float, float, float]]) -> list[dict | 
             "up": cs[i][1] >= cs[i - 1][1],
             "m5": (cs[i][1] / cs[i - 1][1] - 1) * 100,
             "base": ap.base_formed(lows15),
+            "chg7d": (px / cs[i - 2016][1] - 1) * 100 if i >= 2016 else None,
         }
     return stats
 
@@ -152,6 +155,9 @@ def simulate(data: dict[str, list], stats: dict[str, list], btc: dict[int, tuple
                         continue
                     sc = ap.dip_score(s["chg24"], s["rng"], s["pos"], s["room"], s["vol"])
                     if sc is None or not (s["base"] and s["up"]):
+                        continue
+                    c7 = s.get("chg7d")
+                    if SEVEN_ON and c7 is not None and not (SEVEN_LO <= c7 <= SEVEN_HI):
                         continue
                     if best is None or sc > best[0]:
                         best = (sc, sym, s)
@@ -290,3 +296,79 @@ def risk_study() -> None:
 
 if "--risk" in sys.argv:
     risk_study()
+
+
+def fng_study() -> None:
+    """Regime lever: same 30d sim, gated by CMC Fear&Greed (daily) at various thresholds."""
+    days = int(sys.argv[sys.argv.index("--days") + 1]) if "--days" in sys.argv else 30
+    with open(os.path.join(CACHE, "fng_hist.json")) as f:
+        fng = {int(x["timestamp"]) // 86400: int(x["value"]) for x in json.load(f)["data"]}
+    syms = ap.universe()
+    btc_cs = candles_5m("BTC_USDT", days)
+    data = {}
+    for s in syms:
+        cs = candles_5m(ap.GATE_PAIR.get(s, s) + "_USDT", days)
+        if len(cs) > WARM + 100:
+            data[s] = cs
+    stats = {s: precompute(cs) for s, cs in data.items()}
+    idx = {s: {c[0]: i for i, c in enumerate(cs)} for s, cs in data.items()}
+    bidx = {c[0]: i for i, c in enumerate(btc_cs)}
+
+    ap.POS_MAX, ap.RANGE_MIN, ap.RIDE_GAP_PCT, ap.CAP_PCT = 0.45, 4.5, 0.015, 0.06
+    print(f"{'fng_min':>7} | {'pnl$':>7} {'closed':>6} {'win%':>5} {'dd%':>5} {'hold_h':>6} open")
+    for fng_min in (0, 15, 20, 25, 30):
+        btc = {}
+        for t, i in bidx.items():
+            if i >= WARM:
+                c1h = (btc_cs[i][1] / btc_cs[i - 12][1] - 1) * 100
+                c24 = (btc_cs[i][1] / btc_cs[i - WARM][1] - 1) * 100
+                f_ok = fng.get(t // 86400, 50) >= fng_min
+                btc[t] = (c1h >= ap.BTC_1H_MIN and c24 >= ap.BTC_24H_MIN and f_ok, c1h)
+        all_ts = set()
+        for s in idx:
+            all_ts.update(idx[s].keys())
+        ticks = sorted(all_ts & set(btc))
+        r = simulate(data, stats, btc, ticks, idx, "fixed", 0.0)
+        print(f"{fng_min:>7} | {r['pnl']:>+7.2f} {r['closed']:>6} {r['win_rate']:>5.0f} "
+              f"{r['max_dd']:>5.1f} {r['avg_hold_h']:>6.1f} {r['open']}")
+
+
+if "--fng" in sys.argv:
+    fng_study()
+
+
+def seven_study() -> None:
+    """The SLX lever: block dip-buys on post-parabola collapses / blowoffs (7d chg bounds)."""
+    import scripts.autopilot_backtest as bt
+    days = int(sys.argv[sys.argv.index("--days") + 1]) if "--days" in sys.argv else 30
+    syms = ap.universe()
+    btc_cs = candles_5m("BTC_USDT", days)
+    data = {}
+    for s in syms:
+        cs = candles_5m(ap.GATE_PAIR.get(s, s) + "_USDT", days)
+        if len(cs) > WARM + 100:
+            data[s] = cs
+    stats = {s: precompute(cs) for s, cs in data.items()}
+    idx = {s: {c[0]: i for i, c in enumerate(cs)} for s, cs in data.items()}
+    bidx = {c[0]: i for i, c in enumerate(btc_cs)}
+    btc = {}
+    for t, i in bidx.items():
+        if i >= WARM:
+            c1h = (btc_cs[i][1] / btc_cs[i - 12][1] - 1) * 100
+            c24 = (btc_cs[i][1] / btc_cs[i - WARM][1] - 1) * 100
+            btc[t] = (c1h >= ap.BTC_1H_MIN and c24 >= ap.BTC_24H_MIN, c1h)
+    all_ts = set()
+    for s in idx:
+        all_ts.update(idx[s].keys())
+    ticks = sorted(all_ts & set(btc))
+    ap.POS_MAX, ap.RANGE_MIN, ap.RIDE_GAP_PCT, ap.CAP_PCT = 0.45, 4.5, 0.015, 0.06
+    print(f"{'7d guard':<16} | {'pnl$':>7} {'closed':>6} {'win%':>5} {'dd%':>5} open")
+    for on, lo, hi in ((False, 0, 0), (True, -25, 40), (True, -20, 30), (True, -15, 25)):
+        bt.SEVEN_ON, bt.SEVEN_LO, bt.SEVEN_HI = on, float(lo), float(hi)
+        r = simulate(data, stats, btc, ticks, idx, "fixed", 0.0)
+        lbl = "off" if not on else f"[{lo},{hi}]%"
+        print(f"{lbl:<16} | {r['pnl']:>+7.2f} {r['closed']:>6} {r['win_rate']:>5.0f} {r['max_dd']:>5.1f} {r['open']}")
+
+
+if "--seven" in sys.argv:
+    seven_study()
