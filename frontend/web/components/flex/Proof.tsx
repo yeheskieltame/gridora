@@ -2,7 +2,7 @@
 // the history unfakeable, plus the commit→trade→attest explainer.
 import { Address } from "@/components/Address";
 import { ArrowUpRight } from "@/components/icons";
-import { ADDR } from "@/lib/contracts";
+import { ADDR, COMPETITION, WIN } from "@/lib/contracts";
 import type { Agent } from "@/lib/data";
 
 const CONTRACTS: Array<{ name: string; addr: string; what: string }> = [
@@ -28,18 +28,39 @@ export function Proof({ agent }: { agent: Agent }) {
           <div className="mt-8 grid grid-cols-12 gap-4 md:gap-6">
             <div className="col-span-12 lg:col-span-5 surface-card card-grid p-7">
               <div className="flex items-center justify-between">
-                <span className="chip-volt px-3 py-1 text-[12px]">erc-8004 #140004</span>
+                <span className="chip-volt px-3 py-1 text-[12px]">🥉 {WIN.place}</span>
                 <a href="https://www.8004scan.io/agents" target="_blank" rel="noreferrer"
                    className="link-quiet inline-flex items-center gap-1 text-[12px] lowercase text-accent">
                   8004scan <ArrowUpRight className="w-3 h-3" />
                 </a>
               </div>
-              <h3 className="mt-5 font-display text-lg font-semibold lowercase text-fg">agent identity</h3>
+              <h3 className="mt-5 font-display text-lg font-semibold lowercase text-fg">
+                {WIN.event.toLowerCase()}
+              </h3>
               <p className="mt-2 text-[13px] leading-relaxed text-muted">
-                a soulbound on-chain identity. the journal only accepts entries from its
-                holder — nobody else can write this history, including us after the fact.
+                a soulbound on-chain identity, registered in the competition and journaling
+                every trade since. the journal only accepts entries from its holder — nobody
+                else can write this history, including us after the fact.
               </p>
               <dl className="mt-5 space-y-2.5 text-[13px]">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-faint lowercase shrink-0">erc-8004 identity</dt>
+                  <dd>
+                    <a href={`${COMPETITION.scan}/tx/${COMPETITION.identityTx}`} target="_blank" rel="noreferrer"
+                       className="link-quiet inline-flex items-center gap-1 font-mono text-fg">
+                      #{COMPETITION.agentId} <ArrowUpRight className="w-3 h-3 text-accent" />
+                    </a>
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-faint lowercase shrink-0">competition entry</dt>
+                  <dd>
+                    <a href={`${COMPETITION.scan}/tx/${COMPETITION.registrationTx}`} target="_blank" rel="noreferrer"
+                       className="link-quiet inline-flex items-center gap-1 font-mono text-fg">
+                      registration tx <ArrowUpRight className="w-3 h-3 text-accent" />
+                    </a>
+                  </dd>
+                </div>
                 {agent.wallet && (
                   <div className="flex items-center justify-between gap-3">
                     <dt className="text-faint lowercase shrink-0">trading wallet</dt>

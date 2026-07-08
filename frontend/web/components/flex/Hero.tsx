@@ -1,8 +1,9 @@
 "use client";
 
-// Flex hero: ambient video masked into porcelain, two-tone editorial headline,
-// live on-chain stat strip. Stats arrive pre-computed from the server (JSON-safe).
+// Flex hero: ambient video masked into porcelain, the award ribbon, a two-tone editorial
+// headline, and the live on-chain stat strip. Stats arrive pre-computed from the server.
 import { motion } from "motion/react";
+import { COMPETITION, WIN } from "@/lib/contracts";
 
 const VIDEO_URL =
   "https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260603_132049_036591b8-6e92-4760-b94c-a7ea6eef315c.mp4";
@@ -48,12 +49,27 @@ export function FlexHero({ stats }: { stats: HeroStats }) {
             </span>
             <span className="font-semibold text-accent">live on bnb chain</span>
             <span className="text-faint">·</span>
-            <span>agent #140004</span>
+            <span>agent #{COMPETITION.agentId}</span>
           </motion.p>
 
+          <motion.a
+            href={`${COMPETITION.scan}/tx/${COMPETITION.registrationTx}`}
+            target="_blank" rel="noreferrer"
+            initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, delay: 0.08 }}
+            className="group mt-6 inline-flex items-center gap-3 rounded-full border border-line bg-surface/80 py-1.5 pl-1.5 pr-4 backdrop-blur-sm transition-colors hover:border-accent/50">
+            <span className="chip-volt px-3 py-1 text-[12px] tracking-tight">🥉 {WIN.place}</span>
+            <span className="text-[12px] md:text-[13px] lowercase text-fg/80">
+              {WIN.event.toLowerCase()}
+            </span>
+            <span className="hidden items-center gap-1 text-[11px] lowercase text-faint transition-colors group-hover:text-accent sm:inline-flex">
+              registered on-chain <span aria-hidden>↗</span>
+            </span>
+          </motion.a>
+
           <motion.h1 initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
-                     transition={{ duration: 0.8 }}
-                     className="mt-5 font-display text-[clamp(2.2rem,5.6vw,4.5rem)] leading-[1.06] tracking-tight">
+                     transition={{ duration: 0.8, delay: 0.05 }}
+                     className="mt-6 font-display text-[clamp(2.2rem,5.6vw,4.5rem)] leading-[1.06] tracking-tight">
             <span className="text-fg">the tape doesn&apos;t lie.</span>
             <br />
             <span className="text-muted">every trade this agent settles</span>
