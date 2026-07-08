@@ -1,7 +1,7 @@
 // Pure formatting helpers — no React, importable from server and client.
 
 export function fmtAddress(a: `0x${string}` | null | undefined): string {
-  if (!a) return "—";
+  if (!a) return "n/a";
   return `${a.slice(0, 6)}…${a.slice(-4)}`;
 }
 

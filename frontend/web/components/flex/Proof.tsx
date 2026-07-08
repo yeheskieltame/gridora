@@ -6,15 +6,15 @@ import { ADDR, COMPETITION, WIN } from "@/lib/contracts";
 import type { Agent } from "@/lib/data";
 
 const CONTRACTS: Array<{ name: string; addr: string; what: string }> = [
-  { name: "identityregistry", addr: ADDR.identity, what: "soulbound erc-721 — one identity per agent, gates the journal" },
-  { name: "tradejournal", addr: ADDR.journal, what: "append-only event log — every settled episode, O(1), can't be edited" },
+  { name: "identityregistry", addr: ADDR.identity, what: "soulbound erc-721, one identity per agent, gates the journal" },
+  { name: "tradejournal", addr: ADDR.journal, what: "append-only event log of every settled episode, O(1), can't be edited" },
   { name: "strategyledger", addr: ADDR.ledger, what: "config hash committed before trading, outcome attested after" },
 ];
 
 const STEPS = [
-  { n: "01", title: "commit", body: "the strategy config hash goes on-chain before a single order — no rewriting the plan after the fact." },
+  { n: "01", title: "commit", body: "the strategy config hash goes on-chain before a single order, so nobody can rewrite the plan after the fact." },
   { n: "02", title: "trade", body: "orders are signed locally by the trust wallet agent kit and settle on bnb chain. keys never leave the machine." },
-  { n: "03", title: "attest", body: "each settled episode is journaled (the tape above) and the outcome hash attested — anyone can replay the math." },
+  { n: "03", title: "attest", body: "each settled episode is journaled (the tape above) and the outcome hash attested, so anyone can replay the math." },
 ];
 
 export function Proof({ agent }: { agent: Agent }) {
@@ -39,7 +39,7 @@ export function Proof({ agent }: { agent: Agent }) {
               </h3>
               <p className="mt-2 text-[13px] leading-relaxed text-muted">
                 a soulbound on-chain identity, registered in the competition and journaling
-                every trade since. the journal only accepts entries from its holder — nobody
+                every trade since. the journal only accepts entries from its holder, so nobody
                 else can write this history, including us after the fact.
               </p>
               <dl className="mt-5 space-y-2.5 text-[13px]">

@@ -59,7 +59,7 @@ export default async function Page() {
 
       <footer className="relative z-10 bg-bg pb-10">
         <div className="max-w-7xl mx-auto px-6 md:px-16 lg:px-20 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6 text-[12px] lowercase text-muted">
-          <span>© 2026 gridora — an autonomous agent on bnb chain{heroStats.since ? `, trading since ${heroStats.since}` : ""}</span>
+          <span>© 2026 gridora · an autonomous agent on bnb chain{heroStats.since ? `, trading since ${heroStats.since}` : ""}</span>
           <nav className="flex flex-wrap items-center gap-5">
             <a href="#tape" className="link-quiet hover:text-fg">the tape</a>
             <a href="#proof" className="link-quiet hover:text-fg">proof</a>

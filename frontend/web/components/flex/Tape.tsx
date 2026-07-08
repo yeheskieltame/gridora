@@ -54,7 +54,7 @@ export function Tape({ trades, explorer, gated, windowed }: {
             </h2>
             <p className="mt-2 text-[14px] text-muted max-w-xl">
               {trades.length} journaled episodes on-chain · {wins} closed green.
-              each row is a real BNB Chain transaction — click it, check it.
+              each row is a real BNB Chain transaction. click it, check it.
               {windowed && " (showing the scanned window)"}
             </p>
           </div>
@@ -79,12 +79,12 @@ export function Tape({ trades, explorer, gated, windowed }: {
         <div className="mt-8 surface-card overflow-hidden">
           {gated ? (
             <div className="p-10 text-center text-[14px] text-muted">
-              the RPC gated event logs right now — the on-chain counter above is still
+              the RPC gated event logs right now. the on-chain counter above is still
               authoritative. try again shortly.
             </div>
           ) : filtered.length === 0 ? (
             <div className="p-10 text-center text-[14px] text-muted">
-              {q ? <>nothing matches “{q}” — <button className="underline" onClick={() => setQ("")}>clear the filter</button></> : "no journaled trades yet."}
+              {q ? <>nothing matches “{q}”. <button className="underline" onClick={() => setQ("")}>clear the filter</button></> : "no journaled trades yet."}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -121,7 +121,7 @@ export function Tape({ trades, explorer, gated, windowed }: {
                             bscscan <ArrowUpRight className="w-3 h-3" />
                           </a>
                         ) : (
-                          <span className="text-faint">—</span>
+                          <span className="text-faint">n/a</span>
                         )}
                       </td>
                     </tr>

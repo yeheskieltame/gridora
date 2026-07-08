@@ -27,9 +27,9 @@ function EyePill() {
 export function FlexHero({ stats }: { stats: HeroStats }) {
   const cells: Array<[string, string, boolean]> = [
     ["journaled trades", stats.totalTrades, false],
-    ["win rate", stats.winRate ?? "—", false],
-    ["net pnl (journaled)", stats.netPct ?? "—", (stats.netPct ?? "").startsWith("+")],
-    ["last trade", stats.lastAgo ?? "—", false],
+    ["win rate", stats.winRate ?? "n/a", false],
+    ["net pnl (journaled)", stats.netPct ?? "n/a", (stats.netPct ?? "").startsWith("+")],
+    ["last trade", stats.lastAgo ?? "n/a", false],
   ];
 
   return (

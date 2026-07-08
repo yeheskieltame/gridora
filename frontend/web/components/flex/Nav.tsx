@@ -11,17 +11,6 @@ const LINKS = [
   { label: "how it works", href: "#how" },
 ];
 
-export function Clover({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M16 2c3.3 0 6 2.7 6 6 0 .7-.1 1.4-.3 2 .6-.2 1.3-.3 2.3-.3 3.3 0 6 2.7 6 6s-2.7 6-6 6c-.7 0-1.4-.1-2-.3.2.6.3 1.3.3 2 0 3.3-2.7 6-6 6s-6-2.7-6-6c0-.7.1-1.4.3-2-.6.2-1.3.3-2.3.3-3.3 0-6-2.7-6-6s2.7-6 6-6c.7 0 1.4.1 2 .3-.2-.6-.3-1.3-.3-2 0-3.3 2.7-6 6-6z"
-      />
-    </svg>
-  );
-}
-
 export function FlexNav() {
   const [open, setOpen] = useState(false);
 
@@ -29,7 +18,8 @@ export function FlexNav() {
     <header className="fixed top-0 left-0 w-full z-50 py-5 md:py-8 bg-gradient-to-b from-[#f1f1f1]/80 to-transparent backdrop-blur-[2px]">
       <div className="grid grid-cols-12 items-center gap-x-4 max-w-7xl mx-auto px-6 md:px-16 lg:px-20">
         <a href="#top" className="col-span-6 md:col-span-3 flex items-center gap-2.5 text-fg">
-          <Clover className="w-7 h-7" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/gridora-mark.svg" alt="Gridora" width={28} height={28} className="w-7 h-7" />
           <span className="font-display text-xl font-semibold tracking-tight">gridora</span>
         </a>
 
