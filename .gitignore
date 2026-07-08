@@ -16,7 +16,7 @@ contracts/lib/
 # python caches
 .pytest_cache/
 .ruff_cache/
-# local run artifacts (paper/sqlite stores — no secrets, but not source)
+# local run artifacts (paper/sqlite stores; no secrets, but not source)
 *.db
 *.sqlite
 *.sqlite3
@@ -28,3 +28,6 @@ backend/.bt_cache/
 # local-only demo video (not source, do not push)
 /video/
 scripts-local/
+
+# local-only trading scripts (autopilot etc): developed outside the repo
+backend/scripts/

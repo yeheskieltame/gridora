@@ -26,52 +26,93 @@
 
 ## What Gridora is
 
-Gridora runs an adaptive maker-style grid on BNB Smart Chain. It is built on three principles:
+Gridora runs an adaptive maker-style grid on BNB Smart Chain. Three properties define it.
 
-1. **Non-custodial.** Keys never leave the Trust Wallet Agent Kit (TWAK). TWAK is the only signer and the only execution layer. The Python process never sees a private key.
-2. **Verifiable.** The agent commits its grid config hash on-chain before trading and attests the outcome after. Every settled trade is mirrored to an append-only on-chain TradeJournal. Anyone can recompute the result from a public read-only page.
-3. **Autonomous, inside hard guardrails.** Claude routes the strategy each cycle. Deterministic safety limits (drawdown breaker, inventory cap, token allowlist, account kill-switch) hard-enforce risk no matter what the model decides.
+**It is non-custodial.** Keys never leave the Trust Wallet Agent Kit (TWAK). TWAK is the only signer
+and the only execution layer. The Python process never sees a private key.
+
+**It is verifiable.** The agent commits its grid config hash on-chain before it trades and attests
+the outcome after. Every settled trade is mirrored to an append-only on-chain TradeJournal, so
+anyone can recompute the result from a public read-only page without trusting the operator.
+
+**It is autonomous inside hard guardrails.** Claude routes the strategy each cycle. Deterministic
+safety limits (drawdown breaker, inventory cap, token allowlist, account kill-switch) enforce risk
+no matter what the model decides.
 
 ---
 
 ## Strategy
 
-A grid is the natural strategy to leave running. It does not predict direction. It harvests the oscillation that exists in almost every market most of the time, and it books many small realized gains instead of betting on one trend.
+A grid is the natural strategy to leave running unattended. It does not predict direction. It
+harvests the oscillation that exists in almost every market most of the time, booking many small
+realized gains instead of betting on one trend.
 
-**The mechanics.** Gridora lays N price levels across a band `[lower, upper]`. It rests a BUY at every level below mid and a SELL at every level above. When a BUY fills, it arms a SELL one level higher; when a SELL fills, it arms a BUY one level lower. Each completed round-trip banks the spread between two adjacent levels.
+Gridora lays N price levels across a band. It rests a BUY at every level below mid and a SELL at
+every level above. A filled BUY arms a SELL one level higher; a filled SELL arms a BUY one level
+lower. Each completed round trip banks the spread between two adjacent levels.
 
+```mermaid
+flowchart TB
+    UP["upper band"]:::edge
+    S2["SELL"]:::sell
+    S1["SELL"]:::sell
+    MID["mid"]:::mid
+    B1["BUY"]:::buy
+    B2["BUY"]:::buy
+    LO["lower band"]:::edge
+
+    UP --- S2 --- S1 --- MID --- B1 --- B2 --- LO
+
+    classDef sell fill:#A24E32,stroke:#A24E32,color:#F0EEE6
+    classDef buy fill:#D97757,stroke:#D97757,color:#0A0A0A
+    classDef mid fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A
+    classDef edge fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A,stroke-dasharray:4 4
 ```
-  price
-   ▲
-   │   ── SELL ─────────────────────  upper band
-   │   ── SELL ──
-   │   ── SELL ──        each filled BUY arms a SELL one level up,
-   │   ──(mid)──         each filled SELL arms a BUY one level down
-   │   ── BUY  ──
-   │   ── BUY  ──
-   │   ── BUY  ─────────────────────  lower band
-   └────────────────────────────────► time
+
+Every fill flips its own level into the opposite resting order, so the ladder refills itself as price
+oscillates through it.
+
+```mermaid
+flowchart LR
+    BF["BUY fills<br/>at level n"]:::buy --> AS["arm a SELL<br/>at level n+1"]:::sell
+    AS --> SF["SELL fills<br/>at level n+1"]:::sell
+    SF --> AB["arm a BUY<br/>at level n"]:::buy
+    AB --> BF
+    SF -.-> P["bank the spread<br/>between the two levels"]:::win
+
+    classDef sell fill:#A24E32,stroke:#A24E32,color:#F0EEE6
+    classDef buy fill:#D97757,stroke:#D97757,color:#0A0A0A
+    classDef win fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A,stroke-dasharray:4 4
 ```
 
-What makes it adaptive:
+That spread is the unit of profit, which is why level spacing is the single most important number in
+the system.
+
+What makes the grid adaptive:
 
 | Layer | What it does |
 |---|---|
-| **Volatility-sized band** | The band width tracks the token's recent daily range (24h high to low), clamped to the risk preset. A flat token gets a tight band so price actually crosses levels; a lively token gets a wider one. A fixed band on a quiet token never fills. |
-| **Volatility-first selection** | The universe picker scores the 149 eligible tokens by volatility first, then relative strength and liquidity. A grid needs a token that moves, so a flat-but-liquid name is skipped. |
+| **Volatility-sized band** | Band width tracks the token's recent daily range (24h high to low), clamped to the risk preset. A flat token gets a tight band so price actually crosses levels. A lively token gets a wider one. A fixed band on a quiet token never fills. |
+| **Volatility-first selection** | The universe picker scores the 149 eligible tokens by volatility first, then relative strength and liquidity. A grid needs a token that moves, so a flat but liquid name is skipped. |
 | **Regime bias** | A CoinMarketCap read (Fear and Greed, momentum) leans the grid long, neutral, or short for the regime. |
 | **Fee-aware spacing** | Levels are never tighter than a round-trip cost (two swap fees plus slippage plus gas), so every banked spread clears fees. |
-| **Re-center with hysteresis** | When price leaves the band, the grid re-lays around the new mid. A buffer stops it from churning on every wobble. |
+| **Re-center with hysteresis** | When price leaves the band, the grid re-lays around the new mid. A buffer stops it churning on every wobble. |
 
-**What it trades.** A spot pair from the 149 eligible BEP-20 tokens (an allowlisted alt against a USD stablecoin: USDT, USDC, USD1, FDUSD). One-tap risk presets (Safe, Balanced, Aggressive) map to band width, level count, and deployed fraction.
+**What it trades.** A spot pair from the 149 eligible BEP-20 tokens: an allowlisted alt against a
+USD stablecoin (USDT, USDC, USD1, FDUSD). One-tap risk presets (Safe, Balanced, Aggressive) map to
+band width, level count, and deployed fraction.
 
-**What it optimizes.** Risk-adjusted return, never raw PnL. The competition disqualifies a 30 percent drawdown, so survival is the objective.
+**What it optimizes.** Risk-adjusted return, never raw PnL. The competition disqualifies a 30
+percent drawdown, so survival is the objective function.
 
 ---
 
 ## How it works
 
-Claude (running through the local Claude Code CLI, no API key) is the strategy router. Each cycle it reads the live regime and the current grid state, then picks, switches, tunes, or halts a grid mode. The deterministic engine executes and the guardrails clamp every decision. If Claude is unavailable, the brain falls back to a deterministic regime classifier, so it never bricks.
+Claude, running through the local Claude Code CLI with no API key, is the strategy router. Each
+cycle it reads the live regime and the current grid state, then picks, switches, tunes, or halts a
+grid mode. The deterministic engine executes and the guardrails clamp every decision. If Claude is
+unavailable the brain falls back to a deterministic regime classifier, so the agent never bricks.
 
 ```mermaid
 flowchart LR
@@ -85,14 +126,16 @@ flowchart LR
     HALT --> SENSE
 ```
 
-1. **Sense.** Read the CoinMarketCap regime (Fear and Greed, momentum) and the token's recent volatility.
-2. **Decide.** Claude routes the strategy and tunes band, levels, and bias. Guardrails clamp the choice.
-3. **Check.** Circuit breaker, allowlist, fee floor, and per-trade caps are verified before anything is placed.
-4. **Commit.** The config hash is pinned on-chain before a single order, a timestamped pre-commitment that cannot be backdated.
-5. **Execute.** TWAK signs a maker limit order per level on PancakeSwap, with a swap fallback for pairs without limit support.
-6. **Learn.** When an episode closes, the booked outcome is attested on-chain and every settled trade is mirrored to the TradeJournal.
+| Step | What happens |
+|---|---|
+| **Sense** | Read the CoinMarketCap regime (Fear and Greed, momentum) and the token's recent volatility. |
+| **Decide** | Claude routes the strategy and tunes band, levels, and bias. Guardrails clamp the choice. |
+| **Check** | Circuit breaker, allowlist, fee floor, and per-trade caps are verified before anything is placed. |
+| **Commit** | The config hash is pinned on-chain before a single order. A timestamped pre-commitment cannot be backdated. |
+| **Execute** | TWAK signs a maker limit order per level on PancakeSwap, with a swap fallback for pairs without limit support. |
+| **Learn** | When an episode closes, the booked outcome is attested on-chain and every settled trade is mirrored to the TradeJournal. |
 
-### Guardrails (hard-enforced, independent of the model)
+### Guardrails, hard-enforced and independent of the model
 
 | Guard | Purpose |
 |---|---|
@@ -105,7 +148,10 @@ flowchart LR
 
 ## Architecture
 
-The engine is hexagonal. The domain is pure (grid math, models, regime, universe). The app layer orchestrates and enforces safety. All input and output sits behind ports, so a venue or data source is one adapter folder, and the engine never changes. The UI never imports the engine or any wallet SDK; it reads the chain directly with viem.
+The engine is hexagonal. The domain is pure: grid math, models, regime, universe. The app layer
+orchestrates and enforces safety. All input and output sits behind ports, so a new venue or data
+source is one adapter folder and the engine never changes. The UI never imports the engine or any
+wallet SDK; it reads the chain directly with viem.
 
 ```mermaid
 flowchart TB
@@ -129,15 +175,22 @@ flowchart TB
     PROOF --> UI["Next.js Verifier<br/>viem reads, no wallet connect"]
 ```
 
-**Ports.** `ExchangePort` (the only live one is `bsc_twak`, which signs through TWAK), `SignalPort` (`cmc` for live, `coingecko` for paper), `ChainPort`, `PaymentPort` (x402), `StorePort`.
+| Port | Implementations |
+|---|---|
+| `ExchangePort` | `bsc_twak` (the only live one, signs through TWAK), `paper`, `fake` |
+| `SignalPort` | `cmc` for live, `coingecko` for paper, `fake` for offline |
+| `ChainPort` | `bsc_mirror` (Foundry `cast` writer), `memory_chain` |
+| `PaymentPort` | `x402` pay-per-call |
+| `StorePort` | `sqlite_store` |
 
-**Run modes.** `dry` is fully offline for development. `paper` uses real live prices with simulated fills and no real money. `live` signs real trades through TWAK.
+| Deploy unit | What lives there |
+|---|---|
+| `backend/` | Python hexagonal engine, agent loop, TWAK and CMC adapters, safety, control API |
+| `contracts/` | Foundry: IdentityRegistry, TradeJournal, StrategyLedger (BSC) |
+| `frontend/` | Next.js read-only public Verifier plus the operator Console |
 
-```
-backend/    Python hexagonal engine, agent loop, TWAK and CMC adapters, safety
-contracts/  Foundry: IdentityRegistry, TradeJournal, StrategyLedger (BSC)
-frontend/   Next.js read-only public Verifier (viem, no wallet connect)
-```
+Run modes: `dry` is fully offline for development, `paper` uses real live prices with simulated fills
+and no real money, `live` signs real trades through TWAK.
 
 ---
 
@@ -145,13 +198,17 @@ frontend/   Next.js read-only public Verifier (viem, no wallet connect)
 
 Three ways in, depending on who you are.
 
-### 1 · Watch — nothing to install
+### 1. Watch, nothing to install
 
-The public verifier at **https://gridora.vercel.app** reads BNB Chain directly (viem, no wallet connect, no backend). Every agent's ERC-8004 identity, append-only TradeJournal, and commit-then-attest records are on the page. You need nothing but a browser.
+The public verifier at **https://gridora.vercel.app** reads BNB Chain directly (viem, no wallet
+connect, no backend). Every agent's ERC-8004 identity, append-only TradeJournal, and
+commit-then-attest records are on the page. You need nothing but a browser.
 
-### 2 · Run your own agent — 5 minutes with Docker
+### 2. Run your own agent, five minutes with Docker
 
-Gridora is **non-custodial**, so there is no shared cloud agent to sign up for. Each user self-hosts their own agent with their own TWAK wallet; keys never leave their machine. The public verifier reads everyone's proofs on-chain (the TradeJournal is keyed by agentId).
+Gridora is non-custodial, so there is no shared cloud agent to sign up for. Each user self-hosts
+their own agent with their own TWAK wallet, and keys never leave their machine. The public verifier
+reads everyone's proofs on-chain, because the TradeJournal is keyed by agentId.
 
 ```bash
 git clone https://github.com/yeheskieltame/gridora && cd gridora
@@ -160,21 +217,30 @@ docker compose up -d --build
 curl localhost:8317/api/state            # your agent, live
 ```
 
-The container starts in **paper mode**: real live prices, simulated fills, **no real money**. It runs keyless out of the box — safe to leave up while you get comfortable. The `.env` values you'll want:
+The container starts in **paper mode**: real live prices, simulated fills, no real money. It runs
+keyless out of the box, so it is safe to leave up while you get comfortable. The `.env` values you
+will want:
 
 | Variable | What it is |
 |---|---|
-| `TWAK_ACCESS_ID` / `TWAK_HMAC_SECRET` | Trust Wallet Agent Kit API creds, from [portal.trustwallet.com](https://portal.trustwallet.com) (live mode only) |
-| `TWAK_WALLET_PASSWORD` | password for the agent wallet TWAK creates (`docker compose exec agent twak init`) |
-| `GRIDORA_OWNER` | comma-separated wallet addresses allowed to drive the console; empty = controls locked, read-only |
-| `GRIDORA_CONTROL_HOST` | already `0.0.0.0` inside the container. On a public VPS, publish the port as `127.0.0.1:8317:8317` and put a TLS reverse proxy (Caddy/nginx) in front — the control API itself is plain HTTP |
+| `TWAK_ACCESS_ID` / `TWAK_HMAC_SECRET` | Trust Wallet Agent Kit API credentials from [portal.trustwallet.com](https://portal.trustwallet.com). Live mode only. |
+| `TWAK_WALLET_PASSWORD` | Password for the agent wallet TWAK creates (`docker compose exec agent twak init`). |
+| `GRIDORA_OWNER` | Comma-separated wallet addresses allowed to drive the console. Empty means controls stay locked and the console is read-only. |
+| `GRIDORA_CONTROL_HOST` | Already `0.0.0.0` inside the container. On a public VPS, publish the port as `127.0.0.1:8317:8317` and put a TLS reverse proxy (Caddy, nginx) in front, because the control API itself is plain HTTP. |
 
-**Console.** Point the operator console at your agent — set `NEXT_PUBLIC_CONTROL_API=http://your-host:8317` in `frontend/web/.env` and open `/console`. Your browser wallet only signs a login message (SIWE-lite), never a transaction.
+**Console.** Point the operator console at your agent by setting
+`NEXT_PUBLIC_CONTROL_API=http://your-host:8317` in `frontend/web/.env`, then open `/console`. Your
+browser wallet only signs a login message (SIWE-lite). It never signs a transaction.
 
 > **⚠️ Flipping to live mode trades real money.**
-> Live mode signs real PancakeSwap trades on BSC mainnet with **your** wallet. Going live takes two deliberate steps: set `GRIDORA_TESTNET=false`, `GRIDORA_CHAIN_ID=56`, a mainnet `GRIDORA_BSC_RPC_URL`, and your TWAK creds in `backend/.env`, then uncomment the `command:` override in `docker-compose.yml`. Fund the TWAK wallet only with what you can afford to lose, start with a small `GRIDORA_QUOTE_MARGIN`, and watch `/console`. The competition disqualifies a 30% drawdown.
+> Live mode signs real PancakeSwap trades on BSC mainnet with **your** wallet. Going live takes two
+> deliberate steps: set `GRIDORA_TESTNET=false`, `GRIDORA_CHAIN_ID=56`, a mainnet
+> `GRIDORA_BSC_RPC_URL`, and your TWAK credentials in `backend/.env`, then uncomment the `command:`
+> override in `docker-compose.yml`. Fund the TWAK wallet only with what you can afford to lose,
+> start with a small `GRIDORA_QUOTE_MARGIN`, and watch `/console`. The competition disqualifies a
+> 30% drawdown.
 
-### 3 · Develop
+### 3. Develop
 
 ```bash
 # backend (Python 3.11)
@@ -193,19 +259,25 @@ cd frontend/web && pnpm install && cp .env.example .env       # fill deployed ad
 pnpm dev                                                       # http://localhost:3000
 ```
 
-Paper mode rotates across the allowlist, picks the most tradeable token by volatility and liquidity, and records every simulated fill. Watch it live in the TUI (`--ui`). Press `d` to decide now, `k` to kill to flat, `q` to quit.
+Paper mode rotates across the allowlist, picks the most tradeable token by volatility and liquidity,
+and records every simulated fill. Watch it live in the TUI with `--ui`. Press `d` to decide now, `k`
+to kill to flat, `q` to quit.
 
 ---
 
 ## Verifier
 
-The public page is the agent's proof of work. It reads BNB Chain directly with viem, with no wallet connect and no backend dependency: the ERC-8004 identity, the append-only TradeJournal, and the commit-then-attest StrategyLedger. The custom contracts are an optional read-only mirror; the primary proof path is TWAK-native ERC-8004, because TWAK signs the identity and metadata locally.
+The public page is the agent's proof of work. It reads BNB Chain directly with viem, with no wallet
+connect and no backend dependency: the ERC-8004 identity, the append-only TradeJournal, and the
+commit-then-attest StrategyLedger. The custom contracts are an optional read-only mirror. The
+primary proof path is TWAK-native ERC-8004, because TWAK signs the identity and metadata locally.
 
 ---
 
 ## On-chain (BNB Smart Chain mainnet, chain 56)
 
-Everything below is live and signed by the agent wallet `0x7053676258ef5bFB9b27FCF42092F13fB37B9989`. Live verifier: **https://gridora.vercel.app**.
+Everything below is live and signed by the agent wallet `0x7053676258ef5bFB9b27FCF42092F13fB37B9989`.
+Live verifier: **https://gridora.vercel.app**.
 
 | What | Address / id | Proof |
 |---|---|---|
@@ -216,7 +288,12 @@ Everything below is live and signed by the agent wallet `0x7053676258ef5bFB9b27F
 | TradeJournal (verifier) | [`0xE946C28ea10bf29AcA9a094f66079De84a50d409`](https://bscscan.com/address/0xE946C28ea10bf29AcA9a094f66079De84a50d409#code) | verified |
 | StrategyLedger (verifier) | [`0x56D4831a39A991Ac0fa8CAe533Cb74E47A5DD79d`](https://bscscan.com/address/0x56D4831a39A991Ac0fa8CAe533Cb74E47A5DD79d#code) | verified |
 
-The agent proves work two ways. The primary identity is the TWAK-native ERC-8004 registration. The three verifier contracts are a self-hosted mirror the public page reads. TWAK cannot call arbitrary contracts, so the mirror is written with the agent key through Foundry `cast` (`adapters/chain/bsc_mirror.py`, the `BscMirror` ChainPort): it mints the identity, commits the config hash before trading, and records each settled episode with its attested outcome. In live mode the agent loop uses this writer automatically when the contract addresses are configured.
+The agent proves its work two ways. The primary identity is the TWAK-native ERC-8004 registration.
+The three verifier contracts are a self-hosted mirror that the public page reads. TWAK cannot call
+arbitrary contracts, so the mirror is written with the agent key through Foundry `cast`
+(`adapters/chain/bsc_mirror.py`, the `BscMirror` ChainPort): it mints the identity, commits the
+config hash before trading, and records each settled episode with its attested outcome. In live mode
+the agent loop uses this writer automatically when the contract addresses are configured.
 
 ```bash
 # one-off identity mint / status (reads addresses + signer from backend/.env)
@@ -226,11 +303,16 @@ python -m gridora.adapters.chain.bsc_mirror status
 
 ### Ecosystem
 
-Gridora's identity is a standard **ERC-8004** agent — agentId `140004` on BNB Chain, browsable on [8004scan.io](https://8004scan.io). It is built on the same TWAK + x402 + ERC-8004 stack as BNB Agent Studio, so any tooling that speaks that stack (registries, reputation, explorers) picks Gridora up for free.
+Gridora's identity is a standard **ERC-8004** agent, agentId `140004` on BNB Chain, browsable on
+[8004scan.io](https://8004scan.io). It is built on the same TWAK, x402, and ERC-8004 stack as BNB
+Agent Studio, so any tooling that speaks that stack (registries, reputation, explorers) picks
+Gridora up for free.
 
 ## Defaults and safety
 
-Testnet by default (chainId 97). The agent refuses on an environment and chain mismatch. Private keys are never committed or printed; `.env` and `.secrets/` are gitignored. Any mainnet or money action stops and asks first.
+Testnet by default (chainId 97). The agent refuses on an environment and chain mismatch. Private
+keys are never committed or printed; `.env` and `.secrets/` are gitignored. Any mainnet or money
+action stops and asks first.
 
 ---
 
