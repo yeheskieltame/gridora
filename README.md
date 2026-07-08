@@ -15,11 +15,11 @@
   <a href="#how-it-works">How it works</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#quickstart">Quickstart</a> ·
-  <a href="./Gridora-Plan.md">Full plan</a>
+  <a href="#on-chain-bnb-smart-chain-mainnet-chain-56">On-chain</a>
 </p>
 
 <p align="center">
-  <sub>BNB Hack: AI Trading Agent Edition · CoinMarketCap × Trust Wallet × BNB Chain</sub>
+  <sub><b>🥉 3rd place</b> · BNB Hack: AI Trading Agent Edition · CoinMarketCap × Trust Wallet × BNB Chain</sub>
 </p>
 
 ---
@@ -247,10 +247,6 @@ Testnet by default (chainId 97). The agent refuses on an environment and chain m
 </p>
 
 <p align="center"><sub>BNB Smart Chain · Trust Wallet Agent Kit · CoinMarketCap · PancakeSwap</sub></p>
-
-## Brand assets
-
-See [`frontend/web/public/README.md`](./frontend/web/public/README.md). Brand colors: coral `#D97757`, light coral `#F2AE80`, deep clay `#A24E32`, cream `#F0EEE6`, near-black `#0A0A0A`.
 
 ## Team
 

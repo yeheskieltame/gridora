@@ -1,8 +1,8 @@
-"""AUTOPILOT — the one unified autonomous dip-turn trader (replaces all scripts-local/ one-offs).
+"""AUTOPILOT — the one unified autonomous dip-turn trader.
 
-Distilled from the full live-trade audit (docs/superpowers/specs/2026-07-07-autopilot-design.md):
-every win = dip-turn entry + anti-rugi ratchet exit; every loss = knife-catch, top-chase, or
-gas-churn chop. This bot only ever does the winning pattern:
+Distilled from a full audit of every live trade: every win = dip-turn entry + anti-rugi
+ratchet exit; every loss = knife-catch, top-chase, or gas-churn chop. This bot only ever
+does the winning pattern:
 
   FLAT    scan all verified tokens (one Gate tickers call) behind a BTC regime gate;
           dip filter (discounted, not parabolic, enough range/room) + turn confirm

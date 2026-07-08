@@ -62,7 +62,7 @@ BSC_TOKENS: dict[str, tuple[str, int]] = {
     "LAB":   ("0x7ec43Cf65F1663F820427C62A5780b8f2E25593A", 18),  # LAB — crash-resilient momentum; verified 2026-06-25 (TWAK quote symbol LAB, +0.3% vs CMC). WARNING: thin BSC DEX liq ($0.7M); small size only
     "AAVE":  ("0xfb6115445bff7b52feb98650c87f44907e58f802", 18),  # Binance-Peg AAVE — blue-chip momentum; verified 2026-06-26 (TWAK quote symbol AAVE, ~+1% vs CMC, priceImpact 0 same price $14 vs $28 — LiquidMesh aggregates 30 thin BSC pools, fine at small size)
     "TOSHI": ("0x6a2608Dabe09bc1128EEC7275B92DFB939D5Db3f", 18),  # Toshi (BSC meme) — US-session momentum; verified 2026-06-28 (TWAK quote by addr, eff $0.0001274 ≈ Gate +1.1%, pancake liq $407k). Extended meme — small size + tight SL only
-    # CMC-benefit expansion sweep 2026-07-07 (scripts/universe_expand.py): each passed
+    # CMC-benefit expansion sweep 2026-07-07: each passed
     # ALL of — CMC vol24h ≥ $20M, has a BSC contract (CMC v2/info), TWAK quote-by-address
     # within ±3% of CMC (routability + landmine), Gate SYM_USDT pair exists (taker data),
     # and on-chain decimals()/symbol() verified via RPC. Excluded despite passing:
