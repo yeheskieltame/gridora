@@ -116,15 +116,25 @@ unavailable the brain falls back to a deterministic regime classifier, so the ag
 
 ```mermaid
 flowchart LR
-    SENSE["Sense<br/>CMC regime + volatility"] --> DECIDE["Decide<br/>Claude routes strategy"]
-    DECIDE --> CHECK{"Guardrails<br/>pass?"}
-    CHECK -- no --> HALT["Halt<br/>sit in stablecoin"]
-    CHECK -- yes --> COMMIT["Commit<br/>config hash on-chain"]
-    COMMIT --> EXECUTE["Execute<br/>TWAK signs maker orders"]
-    EXECUTE --> LEARN["Attest outcome<br/>+ update memory"]
+    SENSE["Sense<br/>CMC regime + volatility"]:::data --> DECIDE["Decide<br/>Claude routes strategy"]:::brain
+    DECIDE --> CHECK{"Guardrails<br/>pass?"}:::guard
+    CHECK -- no --> HALT["Halt<br/>sit in stablecoin"]:::halt
+    CHECK -- yes --> COMMIT["Commit<br/>config hash on-chain"]:::proof
+    COMMIT --> EXECUTE["Execute<br/>TWAK signs maker orders"]:::exec
+    EXECUTE --> LEARN["Attest outcome<br/>+ update memory"]:::proof
     LEARN --> SENSE
     HALT --> SENSE
+
+    classDef data  fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A
+    classDef brain fill:#D97757,stroke:#A24E32,color:#0A0A0A
+    classDef guard fill:#0A0A0A,stroke:#D97757,stroke-width:2px,color:#F0EEE6
+    classDef halt  fill:#A24E32,stroke:#A24E32,color:#F0EEE6
+    classDef exec  fill:#F2AE80,stroke:#A24E32,color:#0A0A0A
+    classDef proof fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A,stroke-dasharray:4 4
 ```
+
+Coral is where Claude decides. Black is where the guardrails overrule it. The dashed nodes are the
+two moments the agent writes to the chain, one before it can trade and one after it settles.
 
 | Step | What happens |
 |---|---|
@@ -155,25 +165,40 @@ wallet SDK; it reads the chain directly with viem.
 
 ```mermaid
 flowchart TB
-    subgraph LOCAL["Local machine (non-custodial)"]
+    subgraph LOCAL["🔒 Local machine, non-custodial"]
         direction TB
-        BRAIN["Claude strategy router<br/>(local Claude Code CLI)"]
-        subgraph CORE["Gridora engine (Python, hexagonal)"]
+        BRAIN["Claude strategy router<br/>(local Claude Code CLI)"]:::brain
+        subgraph CORE["Gridora engine · Python, hexagonal"]
             direction TB
-            APP["app: GridEngine, safety guards,<br/>Portfolio, GridService facade"]
-            DOMAIN["domain (pure): grid math,<br/>regime, universe, models"]
+            APP["<b>app</b><br/>GridEngine · safety guards<br/>Portfolio · GridService facade"]:::app
+            DOMAIN["<b>domain</b> (pure)<br/>grid math · regime<br/>universe · models"]:::domain
             APP --> DOMAIN
         end
         BRAIN --> APP
     end
 
-    APP -- SignalPort --> DATA["CoinMarketCap / CoinGecko<br/>regime + volatility"]
-    APP -- ExchangePort --> TWAK["Trust Wallet Agent Kit<br/>signs every order locally"]
-    TWAK --> PCS["PancakeSwap on BSC"]
-    PCS --> PROOF[("BNB Chain<br/>ERC-8004 identity + TradeJournal")]
+    APP -- SignalPort --> DATA["CoinMarketCap / CoinGecko<br/>regime + volatility"]:::data
+    APP -- ExchangePort --> TWAK["Trust Wallet Agent Kit<br/>signs every order locally"]:::signer
+    TWAK --> PCS["PancakeSwap on BSC"]:::venue
+    PCS --> PROOF[("BNB Chain<br/>ERC-8004 identity + TradeJournal")]:::chain
     APP -- ChainPort --> PROOF
-    PROOF --> UI["Next.js Verifier<br/>viem reads, no wallet connect"]
+    PROOF --> UI["Next.js Verifier<br/>viem reads, no wallet connect"]:::ui
+
+    classDef brain  fill:#D97757,stroke:#A24E32,color:#0A0A0A
+    classDef app    fill:#F2AE80,stroke:#A24E32,color:#0A0A0A
+    classDef domain fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A
+    classDef data   fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A,stroke-dasharray:4 4
+    classDef signer fill:#A24E32,stroke:#A24E32,color:#F0EEE6
+    classDef venue  fill:#F2AE80,stroke:#A24E32,color:#0A0A0A
+    classDef chain  fill:#0A0A0A,stroke:#D97757,stroke-width:2px,color:#F0EEE6
+    classDef ui     fill:#F0EEE6,stroke:#0A0A0A,color:#0A0A0A
+
+    style LOCAL fill:#0A0A0A08,stroke:#A24E32,stroke-width:2px,color:#A24E32
+    style CORE  fill:#0A0A0A00,stroke:#D97757,stroke-dasharray:5 5,color:#D97757
 ```
+
+Everything inside the outlined box runs on your machine. The only thing that ever holds a key is the
+deep clay node, and it never hands one out.
 
 | Port | Implementations |
 |---|---|
